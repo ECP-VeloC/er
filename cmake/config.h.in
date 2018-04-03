@@ -1,0 +1,2 @@
+// System Specific
+#cmakedefine HAVE_BYTESWAP_H
