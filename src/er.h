@@ -19,6 +19,7 @@
 
 #define ER_DIRECTION_ENCODE  (1)
 #define ER_DIRECTION_REBUILD (2)
+#define ER_DIRECTION_REMOVE  (3)
 
 int ER_Init(
   const char* conf_file

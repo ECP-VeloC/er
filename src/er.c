@@ -324,6 +324,45 @@ static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* dir)
   return rc;
 }
 
+static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* dir)
+{
+  int rc = ER_SUCCESS;
+
+  int rank;
+  MPI_Comm_rank(comm_world, &rank);
+
+  /* build name of shuffile file */
+  char shuffile_file[1024];
+  snprintf(shuffile_file, sizeof(shuffile_file), "%s/shuffle", dir);
+
+  /* build path to redset file for this process */
+  char redset_path[1024];
+  snprintf(redset_path, sizeof(redset_path), "%s/%d", dir, rank);
+
+  /* delete association information */
+  shuffile_remove(comm_world, comm_store, shuffile_file);
+
+  /* delete redundancy data, could avoid recover step if
+   * the descriptor is cached somewhere */
+  redset d;
+  redset_recover(comm_world, redset_path, &d);
+  redset_unapply(redset_path, d);
+  redset_delete(&d);
+
+  /* TODO: remove directory */
+
+  int rank_store;
+  MPI_Comm_rank(comm_store, &rank_store);
+
+  /* rank 0 on comm store creates the directory */
+  //if (rank_store == 0) {
+  //  redset_rmdir(dir, mode_dir);
+  //}
+  //MPI_Barrier(comm_store);
+
+  return rc;
+}
+
 /* initiate encode/rebuild operation on specified set id */
 int ER_Dispatch(int set_id)
 {
@@ -395,10 +434,17 @@ int ER_Dispatch(int set_id)
 
       /* free list of file names */
       er_free(&filenames);
-    } else {
+    } else if (direction == ER_DIRECTION_REBUILD) {
+      /* migrate files to new rank locations (if needed),
+       * and rebuild missing files (if needed) */
       MPI_Comm comm_world = MPI_COMM_WORLD;
       MPI_Comm comm_store = MPI_COMM_WORLD;
       rc = er_rebuild(comm_world, comm_store, dir);
+    } else {
+      /* delete metadata added when encoding files */
+      MPI_Comm comm_world = MPI_COMM_WORLD;
+      MPI_Comm comm_store = MPI_COMM_WORLD;
+      rc = er_remove(comm_world, comm_store, dir);
     }
   } else {
     /* failed to find set id */

@@ -49,13 +49,21 @@ int main (int argc, char* argv[])
 
   int scheme_id = ER_Create_Scheme(MPI_COMM_WORLD, hostname, ranks, ranks);
 
+  // encode files using redundancy scheme
   int set_id = ER_Create(dsetname, ER_DIRECTION_ENCODE, scheme_id);
   ER_Add(set_id, filename);
   ER_Dispatch(set_id);
   ER_Wait(set_id);
   ER_Free(set_id);
 
+  // rebuild encoded files (and redundancy data)
   set_id = ER_Create(dsetname, ER_DIRECTION_REBUILD, 0);
+  ER_Dispatch(set_id);
+  ER_Wait(set_id);
+  ER_Free(set_id);
+
+  // delete redundancy data added during ENCODE
+  set_id = ER_Create(dsetname, ER_DIRECTION_REMOVE, 0);
   ER_Dispatch(set_id);
   ER_Wait(set_id);
   ER_Free(set_id);
