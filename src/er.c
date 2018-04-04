@@ -21,6 +21,18 @@ static int er_set_counter = 0;
 static kvtree* er_schemes = NULL;
 static kvtree* er_sets = NULL;
 
+/* define the path to the shuffile file */
+static void build_shuffile_path(char* file, size_t len, const char* path)
+{
+  snprintf(file, len, "%s.shuffile", path);
+}
+
+/* define the path to the redset file for the specified rank */
+static void build_redset_path(char* file, size_t len, const char* path, int rank)
+{
+  snprintf(file, len, "%s.%d.redset", path, rank);
+}
+
 int ER_Init(const char* conf_file)
 {
   int rc = ER_SUCCESS;
@@ -230,7 +242,7 @@ int ER_Add(int set_id, const char* file)
   return rc;
 }
 
-static int er_encode(MPI_Comm comm_world, MPI_Comm comm_store, int num_files, const char** filenames, const char* dir, redset d)
+static int er_encode(MPI_Comm comm_world, MPI_Comm comm_store, int num_files, const char** filenames, const char* path, redset d)
 {
   int rc = ER_SUCCESS;
 
@@ -240,20 +252,13 @@ static int er_encode(MPI_Comm comm_world, MPI_Comm comm_store, int num_files, co
   int rank_store;
   MPI_Comm_rank(comm_store, &rank_store);
 
-  /* rank 0 on comm store creates the directory */
-  //if (rank_store == 0) {
-    mode_t mode_dir = redset_getmode(1, 1, 1);
-    redset_mkdir(dir, mode_dir);
-  //}
-  //MPI_Barrier(comm_store);
-
   /* build name of shuffile file */
   char shuffile_file[1024];
-  snprintf(shuffile_file, sizeof(shuffile_file), "%s/shuffle", dir);
+  build_shuffile_path(shuffile_file, sizeof(shuffile_file), path);
 
   /* TODO: read process name from scheme? */
   char redset_path[1024];
-  snprintf(redset_path, sizeof(redset_path), "%s/%d", dir, rank);
+  build_redset_path(redset_path, sizeof(redset_path), path, rank);
 
   /* apply redundancy */
   if (redset_apply(num_files, filenames, redset_path, d) != REDSET_SUCCESS) {
@@ -293,7 +298,7 @@ static int er_encode(MPI_Comm comm_world, MPI_Comm comm_store, int num_files, co
   return rc;
 }
 
-static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* dir)
+static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* path)
 {
   int rc = ER_SUCCESS;
 
@@ -305,11 +310,11 @@ static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* dir)
 
   /* build name of shuffile file */
   char shuffile_file[1024];
-  snprintf(shuffile_file, sizeof(shuffile_file), "%s/shuffle", dir);
+  build_shuffile_path(shuffile_file, sizeof(shuffile_file), path);
 
   /* build path to redset file for this process */
   char redset_path[1024];
-  snprintf(redset_path, sizeof(redset_path), "%s/%d", dir, rank);
+  build_redset_path(redset_path, sizeof(redset_path), path, rank);
 
   /* migrate files back to ranks in case of new rank-to-node mapping */
   shuffile_migrate(comm_world, comm_store, shuffile_file);
@@ -324,7 +329,7 @@ static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* dir)
   return rc;
 }
 
-static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* dir)
+static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* path)
 {
   int rc = ER_SUCCESS;
 
@@ -333,11 +338,11 @@ static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* dir)
 
   /* build name of shuffile file */
   char shuffile_file[1024];
-  snprintf(shuffile_file, sizeof(shuffile_file), "%s/shuffle", dir);
+  build_shuffile_path(shuffile_file, sizeof(shuffile_file), path);
 
   /* build path to redset file for this process */
   char redset_path[1024];
-  snprintf(redset_path, sizeof(redset_path), "%s/%d", dir, rank);
+  build_redset_path(redset_path, sizeof(redset_path), path, rank);
 
   /* delete association information */
   shuffile_remove(comm_world, comm_store, shuffile_file);
@@ -349,16 +354,8 @@ static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* dir)
   redset_unapply(redset_path, d);
   redset_delete(&d);
 
-  /* TODO: remove directory */
-
   int rank_store;
   MPI_Comm_rank(comm_store, &rank_store);
-
-  /* rank 0 on comm store creates the directory */
-  //if (rank_store == 0) {
-  //  redset_rmdir(dir, mode_dir);
-  //}
-  //MPI_Barrier(comm_store);
 
   return rc;
 }
@@ -377,9 +374,9 @@ int ER_Dispatch(int set_id)
       rc = ER_FAILURE;
     }
 
-    /* TODO: allow caller to specify directory */
-    char dir[1024];
-    snprintf(dir, sizeof(dir), ".er.%s", name);
+    /* TODO: allow caller to specify path */
+    char path[1024];
+    snprintf(path, sizeof(path), ".er.%s", name);
 
     /* get direction of operation (encode / rebuild) */
     int direction = 0;
@@ -425,7 +422,7 @@ int ER_Dispatch(int set_id)
         if (rc == ER_SUCCESS) {
           MPI_Comm comm_world = MPI_COMM_WORLD;
           MPI_Comm comm_store = MPI_COMM_WORLD;
-          rc = er_encode(comm_world, comm_store, num_files, filenames, dir, *dptr);
+          rc = er_encode(comm_world, comm_store, num_files, filenames, path, *dptr);
         }
       } else {
         /* failed to find scheme id for this set */
@@ -439,12 +436,12 @@ int ER_Dispatch(int set_id)
        * and rebuild missing files (if needed) */
       MPI_Comm comm_world = MPI_COMM_WORLD;
       MPI_Comm comm_store = MPI_COMM_WORLD;
-      rc = er_rebuild(comm_world, comm_store, dir);
+      rc = er_rebuild(comm_world, comm_store, path);
     } else {
       /* delete metadata added when encoding files */
       MPI_Comm comm_world = MPI_COMM_WORLD;
       MPI_Comm comm_store = MPI_COMM_WORLD;
-      rc = er_remove(comm_world, comm_store, dir);
+      rc = er_remove(comm_world, comm_store, path);
     }
   } else {
     /* failed to find set id */
