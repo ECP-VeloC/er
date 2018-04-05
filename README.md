@@ -15,17 +15,30 @@ Usage is documented in src/er.h.
 To build dependencies:
 
     git clone git@github.com:LLNL/KVTree.git KVTree.git
+    git clone git@xgitlab.cels.anl.gov:ecp-veloc/rankstr.git rankstr.git
     git clone git@xgitlab.cels.anl.gov:ecp-veloc/redset.git redset.git
     git clone git@xgitlab.cels.anl.gov:ecp-veloc/shuffile.git shuffile.git
 
-    mkdir build
     mkdir install
+
+    rm -rf build
+    mkdir build
     cd build
     cmake -DCMAKE_INSTALL_PREFIX=../install -DMPI=ON ../KVTree.git
     make clean
     make
     make install
     make test
+    cd ..
+
+    rm -rf build
+    mkdir build
+    cd build
+    cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=../install -DMPI=ON ../rankstr.git
+    make clean
+    make
+    make install
+    cd ..
 
     rm -rf build
     mkdir build
@@ -34,6 +47,7 @@ To build dependencies:
     make clean
     make
     make install
+    cd ..
 
     rm -rf build
     mkdir build
@@ -42,6 +56,7 @@ To build dependencies:
     make clean
     make
     make install
+    cd ..
 
 To build ER:
 
@@ -52,4 +67,4 @@ Some simple test programs exist in the test directory.
 
 To build a test for the ER API:
 
-    mpicc -g -O0 -o test_er test_er.c -I../install/include -L../install/lib64 -lkvtree -lshuffile -lredset -I../src -L../src -ler
+    mpicc -g -O0 -o test_er test_er.c -I../install/include -L../install/lib64 -lkvtree -lshuffile -lredset -lrankstr -I../src -L../src -ler
