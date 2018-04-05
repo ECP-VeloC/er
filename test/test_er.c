@@ -77,6 +77,8 @@ int main (int argc, char* argv[])
 
   ER_Finalize();
 
+  unlink(filename);
+
   MPI_Comm_free(&comm_host);
 
   MPI_Finalize();
