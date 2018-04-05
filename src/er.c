@@ -463,6 +463,7 @@ static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* path
     /* rebuild failed, rc is same value across comm_world */
     rc = ER_FAILURE;
   }
+  redset_delete(&d);
 
   /* if successful, update state to ENCODED, otherwise leave as CORRUPT */
   if (rc == ER_SUCCESS) {
