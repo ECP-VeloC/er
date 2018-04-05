@@ -14,6 +14,74 @@
 
 #include "er.h"
 
+void test_encode(int scheme_id, MPI_Comm world, MPI_Comm store, const char* name, int numfiles, const char** filelist)
+{
+  // encode files using redundancy scheme
+  int set_id = ER_Create(world, store, name, ER_DIRECTION_ENCODE, scheme_id);
+
+  int i;
+  for (i = 0; i < numfiles; i++) {
+    const char* file = filelist[i];
+    ER_Add(set_id, file);
+  }
+
+  ER_Dispatch(set_id);
+  ER_Wait(set_id);
+  ER_Free(set_id);
+}
+
+void test_rebuild_no_failure(MPI_Comm world, MPI_Comm store, const char* name)
+{
+  // rebuild encoded files (and redundancy data)
+  int set_id = ER_Create(world, store, name, ER_DIRECTION_REBUILD, 0);
+  ER_Dispatch(set_id);
+  ER_Wait(set_id);
+  ER_Free(set_id);
+}
+
+void test_rebuild_one_failure_reverse(MPI_Comm world, MPI_Comm store, const char* name, int numfiles, const char** filelist)
+{
+  int rank, ranks;
+  MPI_Comm_rank(world, &rank);
+  MPI_Comm_size(world, &ranks);
+
+  // delete files for one rank
+  if (rank == 0) {
+    int i;
+    for (i = 0; i < numfiles; i++) {
+      const char* file = filelist[i];
+      unlink(file);
+    }
+  }
+
+  // reverse ranks in world communicator
+  MPI_Comm newworld;
+  MPI_Comm_split(world, 0, ranks - rank, &newworld);
+
+  /* create communicator of all procs on the same host */
+  MPI_Comm newstore;
+  char hostname[HOST_NAME_MAX + 1];
+  gethostname(hostname, sizeof(hostname));
+  rankstr_mpi_comm_split(newworld, hostname, 0, 0, 1, &newstore);
+
+  // rebuild encoded files (and redundancy data)
+  int set_id = ER_Create(newworld, newstore, name, ER_DIRECTION_REBUILD, 0);
+  ER_Dispatch(set_id);
+  ER_Wait(set_id);
+  ER_Free(set_id);
+
+  MPI_Comm_free(&newstore);
+  MPI_Comm_free(&newworld);
+}
+
+void test_remove_no_failure(MPI_Comm world, MPI_Comm store, const char* name)
+{
+  int set_id = ER_Create(world, store, name, ER_DIRECTION_REMOVE, 0);
+  ER_Dispatch(set_id);
+  ER_Wait(set_id);
+  ER_Free(set_id);
+}
+
 int main (int argc, char* argv[])
 {
   MPI_Init(&argc, &argv);
@@ -55,23 +123,19 @@ int main (int argc, char* argv[])
   int scheme_id = ER_Create_Scheme(MPI_COMM_WORLD, hostname, ranks, ranks);
 
   // encode files using redundancy scheme
-  int set_id = ER_Create(MPI_COMM_WORLD, comm_host, dsetname, ER_DIRECTION_ENCODE, scheme_id);
-  ER_Add(set_id, filename);
-  ER_Dispatch(set_id);
-  ER_Wait(set_id);
-  ER_Free(set_id);
+  test_encode(scheme_id, MPI_COMM_WORLD, comm_host, dsetname, 1, filelist);
 
   // rebuild encoded files (and redundancy data)
-  set_id = ER_Create(MPI_COMM_WORLD, comm_host, dsetname, ER_DIRECTION_REBUILD, 0);
-  ER_Dispatch(set_id);
-  ER_Wait(set_id);
-  ER_Free(set_id);
+  test_rebuild_no_failure(MPI_COMM_WORLD, comm_host, dsetname);
 
   // delete redundancy data added during ENCODE
-  set_id = ER_Create(MPI_COMM_WORLD, comm_host, dsetname, ER_DIRECTION_REMOVE, 0);
-  ER_Dispatch(set_id);
-  ER_Wait(set_id);
-  ER_Free(set_id);
+  test_remove_no_failure(MPI_COMM_WORLD, comm_host, dsetname);
+
+  // encode files using redundancy scheme
+  test_encode(scheme_id, MPI_COMM_WORLD, comm_host, dsetname, 1, filelist);
+
+  // rebuild encoded files (and redundancy data)
+  test_rebuild_one_failure_reverse(MPI_COMM_WORLD, comm_host, dsetname, 1, filelist);
 
   ER_Free_Scheme(scheme_id);
 
