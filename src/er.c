@@ -16,11 +16,9 @@
 #include "er.h"
 #include "er_util.h"
 
-#define ER_STATE_NULL            (0)
-#define ER_STATE_CREATED         (1)
-#define ER_STATE_REBUILD_SHUFFLE (2)
-#define ER_STATE_REBUILD_RECOVER (3)
-#define ER_STATE_REMOVE          (4)
+#define ER_STATE_NULL    (0)
+#define ER_STATE_CORRUPT (1)
+#define ER_STATE_ENCODED (2)
 
 typedef struct {
   MPI_Comm comm_world;
@@ -33,6 +31,12 @@ static int er_set_counter = 0;
 static kvtree* er_schemes = NULL;
 static kvtree* er_sets = NULL;
 
+/* define the path to the er file */
+static void build_er_path(char* file, size_t len, const char* path)
+{
+  snprintf(file, len, "%s.er", path);
+}
+
 /* define the path to the shuffile file */
 static void build_shuffile_path(char* file, size_t len, const char* path)
 {
@@ -43,6 +47,83 @@ static void build_shuffile_path(char* file, size_t len, const char* path)
 static void build_redset_path(char* file, size_t len, const char* path, int rank)
 {
   snprintf(file, len, "%s.%d", path, rank);
+}
+
+static void er_state_write(MPI_Comm comm_world, MPI_Comm comm_store, const char* path, int state)
+{
+  /* get our rank in our storage group */
+  int rank_store;
+  MPI_Comm_rank(comm_store, &rank_store);
+
+  if (rank_store == 0) {
+    /* build name of er state file */
+    char er_file[1024];
+    build_er_path(er_file, sizeof(er_file), path);
+
+    /* write state to file */
+    kvtree* data = kvtree_new();
+    kvtree_util_set_int(data, "STATE", state);
+    kvtree_write_file(er_file, data);
+    kvtree_delete(&data);
+  }
+
+  /* wait for everyone to update state */
+  MPI_Barrier(comm_world);
+
+  return;
+}
+
+static void er_state_read(MPI_Comm comm_world, MPI_Comm comm_store, const char* path, int* state)
+{
+  /* intialize state to NULL */
+  *state = ER_STATE_NULL;
+
+  /* get our rank in our storage group */
+  int rank_store;
+  MPI_Comm_rank(comm_store, &rank_store);
+
+  if (rank_store == 0) {
+    /* build name of er state file */
+    char er_file[1024];
+    build_er_path(er_file, sizeof(er_file), path);
+
+    /* read state from file */
+    kvtree* data = kvtree_new();
+    kvtree_read_file(er_file, data);
+    kvtree_util_get_int(data, "STATE", state);
+    kvtree_delete(&data);
+  }
+
+  /* TODO: we could end up with stale state files under cases like:
+   * 1) job runs and writes file (file version 1), then dies
+   * 2) job runs on different nodes and writes file (file version 2), then dies again
+   * 3) job runs back on original nodes (some of which have v1 and some v2)
+   *
+   * right now, we're just picking the lowest rank that has some version */
+
+  /* agree on state across processes,
+   * just go with the lowest rank who has the value */
+  int rank_world, ranks_world;
+  MPI_Comm_rank(comm_world, &rank_world);
+  MPI_Comm_size(comm_world, &ranks_world);
+
+  /* if we have a state value, this process is eligible */
+  int valid_rank = ranks_world;
+  if (*state != ER_STATE_NULL) {
+    valid_rank = rank_world;
+  }
+
+  /* compute lowest rank that has a valid value */
+  int lowest_rank;
+  MPI_Allreduce(&valid_rank, &lowest_rank, 1, MPI_INT, MPI_MIN, comm_world);
+
+  /* get value from lowest rank with valid value,
+   * if there was to valid value, state still be set to ER_STATE_NULL */
+  if (lowest_rank < ranks_world) {
+    MPI_Bcast(state, 1, MPI_INT, lowest_rank, comm_world);
+  }
+
+  return;
 }
 
 int ER_Init(const char* conf_file)
@@ -296,7 +377,8 @@ static int er_encode(MPI_Comm comm_world, MPI_Comm comm_store, int num_files, co
   char redset_path[1024];
   build_redset_path(redset_path, sizeof(redset_path), path, rank_world);
 
-  /* TODO: update state to CORRUPT */
+  /* update data state to CORRUPT */
+  er_state_write(comm_world, comm_store, path, ER_STATE_CORRUPT);
 
   /* apply redundancy */
   if (redset_apply(num_files, filenames, redset_path, d) != REDSET_SUCCESS) {
@@ -334,6 +416,9 @@ static int er_encode(MPI_Comm comm_world, MPI_Comm comm_store, int num_files, co
   redset_filelist_release(&red_list);
 
   /* TODO: if successful, update state to ENCODED, otherwise CORRUPT */
+  if (rc == ER_SUCCESS) {
+    er_state_write(comm_world, comm_store, path, ER_STATE_ENCODED);
+  }
 
   return rc;
 }
@@ -341,6 +426,14 @@ static int er_encode(MPI_Comm comm_world, MPI_Comm comm_store, int num_files, co
 static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* path)
 {
   int rc = ER_SUCCESS;
+
+  /* read state file and ensure data is encoded */
+  int state;
+  er_state_read(comm_world, comm_store, path, &state);
+  if (state != ER_STATE_ENCODED) {
+    /* if it's not encoded, we can't attempt rebuild */
+    return ER_FAILURE;
+  }
 
   /* TODO: read process name from scheme? */
   int rank_world;
@@ -354,7 +447,8 @@ static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* path
   char redset_path[1024];
   build_redset_path(redset_path, sizeof(redset_path), path, rank_world);
 
-  /* TODO: read state file from comm_store, find consistent state */
+  /* update data state to CORRUPT */
+  er_state_write(comm_world, comm_store, path, ER_STATE_CORRUPT);
 
   /* TODO: update state to SHUFFLE */
 
@@ -370,7 +464,10 @@ static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* path
     rc = ER_FAILURE;
   }
 
-  /* TODO: if successful, update state to ENCODED, otherwise CORRUPT */
+  /* if successful, update state to ENCODED, otherwise leave as CORRUPT */
+  if (rc == ER_SUCCESS) {
+    er_state_write(comm_world, comm_store, path, ER_STATE_ENCODED);
+  }
 
   return rc;
 }
@@ -383,6 +480,14 @@ static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* path)
   int rank_world;
   MPI_Comm_rank(comm_world, &rank_world);
 
+  /* get rank within storage group */
+  int rank_store;
+  MPI_Comm_rank(comm_store, &rank_store);
+
+  /* build name of er state file */
+  char er_file[1024];
+  build_er_path(er_file, sizeof(er_file), path);
+
   /* build name of shuffile file */
   char shuffile_file[1024];
   build_shuffile_path(shuffile_file, sizeof(shuffile_file), path);
@@ -391,7 +496,8 @@ static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* path)
   char redset_path[1024];
   build_redset_path(redset_path, sizeof(redset_path), path, rank_world);
 
-  /* TODO: update state to CORRUPT */
+  /* update data state to CORRUPT */
+  er_state_write(comm_world, comm_store, path, ER_STATE_CORRUPT);
 
   /* delete association information */
   shuffile_remove(comm_world, comm_store, shuffile_file);
@@ -403,7 +509,10 @@ static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* path)
   redset_unapply(redset_path, d);
   redset_delete(&d);
 
-  /* TODO: if successful, update state to NORMAL, otherwise CORRUPT */
+  /* delete er state file */
+  if (rank_store == 0) {
+    unlink(er_file);
+  }
 
   return rc;
 }
