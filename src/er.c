@@ -13,6 +13,7 @@
 #include "redset.h"
 #include "shuffile.h"
 
+#include "er.h"
 #include "er_util.h"
 
 static int er_scheme_counter = 0;
@@ -30,7 +31,7 @@ static void build_shuffile_path(char* file, size_t len, const char* path)
 /* define the path to the redset file for the specified rank */
 static void build_redset_path(char* file, size_t len, const char* path, int rank)
 {
-  snprintf(file, len, "%s.%d.redset", path, rank);
+  snprintf(file, len, "%s.%d", path, rank);
 }
 
 int ER_Init(const char* conf_file)
@@ -246,8 +247,8 @@ static int er_encode(MPI_Comm comm_world, MPI_Comm comm_store, int num_files, co
 {
   int rc = ER_SUCCESS;
 
-  int rank;
-  MPI_Comm_rank(comm_world, &rank);
+  int rank_world;
+  MPI_Comm_rank(comm_world, &rank_world);
 
   int rank_store;
   MPI_Comm_rank(comm_store, &rank_store);
@@ -258,7 +259,7 @@ static int er_encode(MPI_Comm comm_world, MPI_Comm comm_store, int num_files, co
 
   /* TODO: read process name from scheme? */
   char redset_path[1024];
-  build_redset_path(redset_path, sizeof(redset_path), path, rank);
+  build_redset_path(redset_path, sizeof(redset_path), path, rank_world);
 
   /* apply redundancy */
   if (redset_apply(num_files, filenames, redset_path, d) != REDSET_SUCCESS) {
@@ -303,8 +304,8 @@ static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* path
   int rc = ER_SUCCESS;
 
   /* TODO: read process name from scheme? */
-  int rank;
-  MPI_Comm_rank(comm_world, &rank);
+  int rank_world;
+  MPI_Comm_rank(comm_world, &rank_world);
 
   /* TODO: get set of procs sharing access to shuffile file */
 
@@ -314,7 +315,7 @@ static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* path
 
   /* build path to redset file for this process */
   char redset_path[1024];
-  build_redset_path(redset_path, sizeof(redset_path), path, rank);
+  build_redset_path(redset_path, sizeof(redset_path), path, rank_world);
 
   /* migrate files back to ranks in case of new rank-to-node mapping */
   shuffile_migrate(comm_world, comm_store, shuffile_file);
@@ -333,8 +334,8 @@ static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* path)
 {
   int rc = ER_SUCCESS;
 
-  int rank;
-  MPI_Comm_rank(comm_world, &rank);
+  int rank_world;
+  MPI_Comm_rank(comm_world, &rank_world);
 
   /* build name of shuffile file */
   char shuffile_file[1024];
@@ -342,7 +343,7 @@ static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* path)
 
   /* build path to redset file for this process */
   char redset_path[1024];
-  build_redset_path(redset_path, sizeof(redset_path), path, rank);
+  build_redset_path(redset_path, sizeof(redset_path), path, rank_world);
 
   /* delete association information */
   shuffile_remove(comm_world, comm_store, shuffile_file);
@@ -354,14 +355,11 @@ static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* path)
   redset_unapply(redset_path, d);
   redset_delete(&d);
 
-  int rank_store;
-  MPI_Comm_rank(comm_store, &rank_store);
-
   return rc;
 }
 
 /* initiate encode/rebuild operation on specified set id */
-int ER_Dispatch(int set_id)
+int ER_Dispatch(MPI_Comm comm_world, MPI_Comm comm_store, int set_id)
 {
   int rc = ER_SUCCESS;
 
@@ -376,7 +374,7 @@ int ER_Dispatch(int set_id)
 
     /* TODO: allow caller to specify path */
     char path[1024];
-    snprintf(path, sizeof(path), ".er.%s", name);
+    snprintf(path, sizeof(path), "%s.er", name);
 
     /* get direction of operation (encode / rebuild) */
     int direction = 0;
@@ -420,8 +418,6 @@ int ER_Dispatch(int set_id)
         }
 
         if (rc == ER_SUCCESS) {
-          MPI_Comm comm_world = MPI_COMM_WORLD;
-          MPI_Comm comm_store = MPI_COMM_WORLD;
           rc = er_encode(comm_world, comm_store, num_files, filenames, path, *dptr);
         }
       } else {
@@ -434,13 +430,9 @@ int ER_Dispatch(int set_id)
     } else if (direction == ER_DIRECTION_REBUILD) {
       /* migrate files to new rank locations (if needed),
        * and rebuild missing files (if needed) */
-      MPI_Comm comm_world = MPI_COMM_WORLD;
-      MPI_Comm comm_store = MPI_COMM_WORLD;
       rc = er_rebuild(comm_world, comm_store, path);
     } else {
       /* delete metadata added when encoding files */
-      MPI_Comm comm_world = MPI_COMM_WORLD;
-      MPI_Comm comm_store = MPI_COMM_WORLD;
       rc = er_remove(comm_world, comm_store, path);
     }
   } else {

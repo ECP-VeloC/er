@@ -22,36 +22,41 @@
 #define ER_DIRECTION_REMOVE  (3)
 
 int ER_Init(
-  const char* conf_file
+  const char* conf_file /* IN - path to configuration file (can be NULL for default) */
 );
 
 int ER_Finalize();
 
+/* defines a redundancy scheme, returns scheme id as integer */
 int ER_Create_Scheme(
-  MPI_Comm comm,
-  const char* failure_domain,
-  int data_blocks,
-  int erasure_blocks
+  MPI_Comm comm,              /* IN - communicator of processes participating in scheme */
+  const char* failure_domain, /* IN - processes with same value of failure_domain are assumed to fail at the same time */
+  int data_blocks,            /* IN - number of original data blocks */
+  int erasure_blocks          /* IN - number of erasure blocks to be generated */
 );
 
-int ER_Free_Scheme(int scheme_id);
+int ER_Free_Scheme(
+  int scheme_id /* IN - release resources associated with specified scheme id */
+);
 
-/* create a named set, and specify whether it should be encoded or recovered */
+/* create a named set, and specify whether it should be encoded, recovered, or unencoded */
 int ER_Create(
-  const char* name,
-  int direction,
-  int scheme_id /* encoding scheme to be applied */
+  const char* name, /* IN - name of operation */
+  int direction,    /* IN - operation to execute: one of ER_DIRECTION constants */
+  int scheme_id     /* IN - redundancy scheme to be applied to this set */
 );
 
 /* adds file to specified set id */
 int ER_Add(
-  int set_id,
-  const char* file
+  int set_id,      /* IN - set id to add file to */
+  const char* file /* IN - path to file */
 );
 
 /* initiate encode/rebuild operation on specified set id */
 int ER_Dispatch(
-  int set_id
+  MPI_Comm comm_world, /* IN - communicator of processes participating in operation */
+  MPI_Comm comm_store, /* IN - communicator of processes that share access to storage holding files */
+  int set_id           /* IN - set id to dispatch */
 );
 
 /* tests whether ongoing dispatch operation to finish,
