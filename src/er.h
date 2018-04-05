@@ -41,9 +41,11 @@ int ER_Free_Scheme(
 
 /* create a named set, and specify whether it should be encoded, recovered, or unencoded */
 int ER_Create(
-  const char* name, /* IN - name of operation */
-  int direction,    /* IN - operation to execute: one of ER_DIRECTION constants */
-  int scheme_id     /* IN - redundancy scheme to be applied to this set */
+  MPI_Comm comm_world, /* IN - communicator of processes participating in operation */
+  MPI_Comm comm_store, /* IN - communicator of processes that share access to storage holding files */
+  const char* name,    /* IN - name of operation */
+  int direction,       /* IN - operation to execute: one of ER_DIRECTION constants */
+  int scheme_id        /* IN - redundancy scheme to be applied to this set */
 );
 
 /* adds file to specified set id */
@@ -54,8 +56,6 @@ int ER_Add(
 
 /* initiate encode/rebuild operation on specified set id */
 int ER_Dispatch(
-  MPI_Comm comm_world, /* IN - communicator of processes participating in operation */
-  MPI_Comm comm_store, /* IN - communicator of processes that share access to storage holding files */
   int set_id           /* IN - set id to dispatch */
 );
 

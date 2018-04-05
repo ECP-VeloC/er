@@ -16,6 +16,17 @@
 #include "er.h"
 #include "er_util.h"
 
+#define ER_STATE_NULL            (0)
+#define ER_STATE_CREATED         (1)
+#define ER_STATE_REBUILD_SHUFFLE (2)
+#define ER_STATE_REBUILD_RECOVER (3)
+#define ER_STATE_REMOVE          (4)
+
+typedef struct {
+  MPI_Comm comm_world;
+  MPI_Comm comm_store;
+} erset;
+
 static int er_scheme_counter = 0;
 static int er_set_counter = 0;
 
@@ -65,6 +76,13 @@ int ER_Finalize()
   kvtree* schemes = kvtree_get(er_schemes, "SCHEMES");
   if (kvtree_size(schemes) > 0) {
     er_err("ER_Finalize called before schemes freed");
+    rc = ER_FAILURE;
+  }
+
+  /* free outstanding sets */
+  kvtree* sets = kvtree_get(er_sets, "SETS");
+  if (kvtree_size(sets) > 0) {
+    er_err("ER_Finalize called before sets freed");
     rc = ER_FAILURE;
   }
 
@@ -152,6 +170,10 @@ int ER_Free_Scheme(int scheme_id)
         /* failed to free redundancy descriptor */
         rc = ER_FAILURE;
       }
+
+      /* TODO: what to do here if redset_delete fails? */
+      /* free the pointer to the redundancy descriptor */
+      er_free(&d);
     } else {
       /* failed to find pointer to reddesc */
       rc = ER_FAILURE;
@@ -168,7 +190,7 @@ int ER_Free_Scheme(int scheme_id)
 }
 
 /* create a named set, and specify whether it should be encoded or recovered */
-int ER_Create(const char* name, int direction, int scheme_id)
+int ER_Create(MPI_Comm comm_world, MPI_Comm comm_store, const char* name, int direction, int scheme_id)
 {
   int rc = ER_SUCCESS;
 
@@ -178,14 +200,20 @@ int ER_Create(const char* name, int direction, int scheme_id)
   }
 
   /* check that we got a valid value for direction */
-  if (direction != ER_DIRECTION_ENCODE &&
-      direction != ER_DIRECTION_REBUILD)
+  if (direction != ER_DIRECTION_ENCODE  &&
+      direction != ER_DIRECTION_REBUILD &&
+      direction != ER_DIRECTION_REMOVE)
   {
     return ER_FAILURE;
   }
 
   /* bump set counter */
   er_set_counter++;
+
+  /* record comms */
+  erset* setptr = (erset*) ER_MALLOC(sizeof(erset));
+  setptr->comm_world = comm_world;
+  setptr->comm_store = comm_store;
 
   /* add an entry for this set */
   kvtree* set = kvtree_set_kv_int(er_sets, "SETS", er_set_counter);
@@ -195,6 +223,9 @@ int ER_Create(const char* name, int direction, int scheme_id)
 
   /* record operation direction */
   kvtree_util_set_int(set, "DIRECTION", direction);
+
+  /* record pointer to our structure */
+  kvtree_util_set_ptr(set, "STRUCT", setptr);
 
   /* when encoding, we need to remember the scheme,
    * it's implied by name on rebuild */
@@ -213,8 +244,12 @@ int ER_Create(const char* name, int direction, int scheme_id)
   /* return set id to caller, -1 if error */
   int ret = er_set_counter;
   if (rc != ER_SUCCESS) {
+    /* failed to create set, so delete it from our list */
+    kvtree_unset_kv_int(er_sets, "SETS", er_set_counter);
+    er_free(&setptr);
     ret = -1;
   }
+
   return ret;
 }
 
@@ -261,6 +296,8 @@ static int er_encode(MPI_Comm comm_world, MPI_Comm comm_store, int num_files, co
   char redset_path[1024];
   build_redset_path(redset_path, sizeof(redset_path), path, rank_world);
 
+  /* TODO: update state to CORRUPT */
+
   /* apply redundancy */
   if (redset_apply(num_files, filenames, redset_path, d) != REDSET_SUCCESS) {
     /* failed to apply redundancy descriptor */
@@ -296,6 +333,8 @@ static int er_encode(MPI_Comm comm_world, MPI_Comm comm_store, int num_files, co
   er_free(&filenames2);
   redset_filelist_release(&red_list);
 
+  /* TODO: if successful, update state to ENCODED, otherwise CORRUPT */
+
   return rc;
 }
 
@@ -307,8 +346,6 @@ static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* path
   int rank_world;
   MPI_Comm_rank(comm_world, &rank_world);
 
-  /* TODO: get set of procs sharing access to shuffile file */
-
   /* build name of shuffile file */
   char shuffile_file[1024];
   build_shuffile_path(shuffile_file, sizeof(shuffile_file), path);
@@ -317,8 +354,14 @@ static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* path
   char redset_path[1024];
   build_redset_path(redset_path, sizeof(redset_path), path, rank_world);
 
+  /* TODO: read state file from comm_store, find consistent state */
+
+  /* TODO: update state to SHUFFLE */
+
   /* migrate files back to ranks in case of new rank-to-node mapping */
   shuffile_migrate(comm_world, comm_store, shuffile_file);
+
+  /* TODO: update state to RECOVER */
 
   /* rebuild files */
   redset d;
@@ -327,6 +370,8 @@ static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* path
     rc = ER_FAILURE;
   }
 
+  /* TODO: if successful, update state to ENCODED, otherwise CORRUPT */
+
   return rc;
 }
 
@@ -334,6 +379,7 @@ static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* path)
 {
   int rc = ER_SUCCESS;
 
+  /* get process name */
   int rank_world;
   MPI_Comm_rank(comm_world, &rank_world);
 
@@ -345,6 +391,8 @@ static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* path)
   char redset_path[1024];
   build_redset_path(redset_path, sizeof(redset_path), path, rank_world);
 
+  /* TODO: update state to CORRUPT */
+
   /* delete association information */
   shuffile_remove(comm_world, comm_store, shuffile_file);
 
@@ -355,11 +403,13 @@ static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* path)
   redset_unapply(redset_path, d);
   redset_delete(&d);
 
+  /* TODO: if successful, update state to NORMAL, otherwise CORRUPT */
+
   return rc;
 }
 
 /* initiate encode/rebuild operation on specified set id */
-int ER_Dispatch(MPI_Comm comm_world, MPI_Comm comm_store, int set_id)
+int ER_Dispatch(int set_id)
 {
   int rc = ER_SUCCESS;
 
@@ -372,13 +422,25 @@ int ER_Dispatch(MPI_Comm comm_world, MPI_Comm comm_store, int set_id)
       rc = ER_FAILURE;
     }
 
-    /* TODO: allow caller to specify path */
+    /* TODO: allow caller to specify this prefix? */
+    /* define prefix to use on all metadata files */
     char path[1024];
     snprintf(path, sizeof(path), "%s.er", name);
 
-    /* get direction of operation (encode / rebuild) */
+    /* get operation (encode, rebuild, remove) */
     int direction = 0;
     if (kvtree_util_get_int(set, "DIRECTION", &direction) != KVTREE_SUCCESS) {
+      rc = ER_FAILURE;
+    }
+
+    /* get world and store communicators */
+    MPI_Comm comm_world = MPI_COMM_NULL;
+    MPI_Comm comm_store = MPI_COMM_NULL;
+    erset* setptr;
+    if (kvtree_util_get_ptr(set, "STRUCT", (void**)&setptr) == KVTREE_SUCCESS) {
+      comm_world = setptr->comm_world;
+      comm_store = setptr->comm_store;
+    } else {
       rc = ER_FAILURE;
     }
 
@@ -417,6 +479,7 @@ int ER_Dispatch(MPI_Comm comm_world, MPI_Comm comm_store, int set_id)
           rc = ER_FAILURE;
         }
 
+        /* apply redundancy to files */
         if (rc == ER_SUCCESS) {
           rc = er_encode(comm_world, comm_store, num_files, filenames, path, *dptr);
         }
@@ -459,6 +522,18 @@ int ER_Wait(int set_id)
 /* free internal resources associated with set id */
 int ER_Free(int set_id)
 {
+  /* free resources associated with set */
+  kvtree* set = kvtree_get_kv_int(er_sets, "SETS", set_id);
+  if (set) {
+    /* free struct attached to set, if any */
+    erset* setptr;
+    if (kvtree_util_get_ptr(set, "STRUCT", (void**)&setptr) == KVTREE_SUCCESS) {
+      er_free(&setptr);
+    }
+  }
+
+  /* delete the set from our list */
   kvtree_unset_kv_int(er_sets, "SETS", set_id);
+
   return ER_SUCCESS;
 }
