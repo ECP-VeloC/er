@@ -16,13 +16,31 @@
 #include "er.h"
 #include "er_util.h"
 
+#define ER_DIRECTION_NULL (0)
+
 #define ER_STATE_NULL    (0)
 #define ER_STATE_CORRUPT (1)
 #define ER_STATE_ENCODED (2)
 
+/* names of API state transitions to ensure caller is invoking
+ * functions in the correct order */
+typedef enum {
+  ER_API_STATE_NULL = 0,
+  ER_API_STATE_CREATED,
+  ER_API_STATE_DISPATCHED,
+  ER_API_STATE_COMPLETED
+} er_api_state;
+
+/* structure to define a set object */
 typedef struct {
+  int type;
+  er_api_state api_state;
+  const char* name;
+  int scheme_id;
   MPI_Comm comm_world;
   MPI_Comm comm_store;
+  kvtree* files;
+  int rc;
 } erset;
 
 static int er_scheme_counter = 0;
@@ -30,6 +48,73 @@ static int er_set_counter = 0;
 
 static kvtree* er_schemes = NULL;
 static kvtree* er_sets = NULL;
+
+static erset* erset_new(int type)
+{
+  /* allocate a new object */
+  erset* set = (erset*) ER_MALLOC(sizeof(erset));
+
+  set->type       = type;
+  set->api_state  = ER_API_STATE_NULL;
+  set->name       = NULL;
+  set->scheme_id  = 0;
+  set->comm_world = MPI_COMM_NULL;
+  set->comm_store = MPI_COMM_NULL;
+  set->files      = kvtree_new();
+  set->rc         = ER_FAILURE;
+
+  return set;
+}
+
+static void erset_delete(erset** ptr)
+{
+  if (ptr != NULL) {
+    /* get pointer to set structure */
+    erset* set = *ptr;
+
+    /* free the name of the set */
+    if (set->name != NULL) {
+      er_free(&set->name);
+    }
+
+    /* TODO: since we haven't dup'd these, we don't need to free them */
+    /* free communicators */
+    if (set->comm_world != MPI_COMM_NULL) {
+      //MPI_Comm_free(&set->comm_world);
+      set->comm_world = MPI_COMM_NULL;
+    }
+    if (set->comm_store != MPI_COMM_NULL) {
+      //MPI_Comm_free(&set->comm_store);
+      set->comm_store = MPI_COMM_NULL;
+    }
+
+    /* free the list of files */
+    kvtree_delete(&set->files);
+
+    /* free the object */
+    er_free(ptr);
+  }
+
+  return;
+}
+
+static erset* erset_get(int set_id)
+{
+  /* lookup set id */
+  erset* setptr = NULL;
+  kvtree* set = kvtree_get_kv_int(er_sets, "SETS", set_id);
+  kvtree_util_get_ptr(set, "STRUCT", (void**)&setptr);
+  return setptr;
+}
+
+static redset* erscheme_get(int scheme_id)
+{
+  /* look up entry for this scheme id */
+  redset* d = NULL;
+  kvtree* scheme = kvtree_get_kv_int(er_schemes, "SCHEMES", scheme_id);
+  kvtree_util_get_ptr(scheme, "PTR", (void**)&d);
+  return d;
+}
 
 /* define the path to the er file */
 static void build_er_path(char* file, size_t len, const char* path)
@@ -231,6 +316,10 @@ int ER_Create_Scheme(
   /* return scheme id to caller, -1 if error */
   int ret = er_scheme_counter;
   if (rc != ER_SUCCESS) {
+    /* drop scheme entry from our map */
+    kvtree_unset_kv_int(er_schemes, "SCHEMES", er_scheme_counter);
+    redset_delete(d);
+    er_free(&d);
     ret = -1;
   }
   return ret;
@@ -241,31 +330,24 @@ int ER_Free_Scheme(int scheme_id)
   int rc = ER_SUCCESS;
 
   /* look up entry for this scheme id */
-  kvtree* scheme = kvtree_get_kv_int(er_schemes, "SCHEMES", scheme_id);
-  if (scheme) {
-    /* get pointer to reddesc */
-    redset* d;
-    if (kvtree_util_get_ptr(scheme, "PTR", (void**)&d) == KVTREE_SUCCESS) {
-      /* free reddesc */
-      if (redset_delete(d) != REDSET_SUCCESS) {
-        /* failed to free redundancy descriptor */
-        rc = ER_FAILURE;
-      }
-
-      /* TODO: what to do here if redset_delete fails? */
-      /* free the pointer to the redundancy descriptor */
-      er_free(&d);
-    } else {
-      /* failed to find pointer to reddesc */
+  redset* d = erscheme_get(scheme_id);
+  if (d != NULL) {
+    /* free reddesc */
+    if (redset_delete(d) != REDSET_SUCCESS) {
+      /* failed to free redundancy descriptor */
       rc = ER_FAILURE;
     }
 
-    /* drop scheme entry from our map */
-    kvtree_unset_kv_int(er_schemes, "SCHEMES", scheme_id);
+    /* TODO: what to do here if redset_delete fails? */
+    /* free the pointer to the redundancy descriptor */
+    er_free(&d);
   } else {
-    /* failed to find scheme id in map */
+    /* failed to find pointer to reddesc */
     rc = ER_FAILURE;
   }
+
+  /* drop scheme entry from our map */
+  kvtree_unset_kv_int(er_schemes, "SCHEMES", scheme_id);
 
   return rc;
 }
@@ -288,22 +370,27 @@ int ER_Create(MPI_Comm comm_world, MPI_Comm comm_store, const char* name, int di
     return ER_FAILURE;
   }
 
-  /* bump set counter */
-  er_set_counter++;
+  /* allocate object for this set */
+  erset* setptr = erset_new(direction);
+
+  /* update our API state on this set */
+  setptr->api_state = ER_API_STATE_CREATED;
+
+  /* record operation path */
+  setptr->name = strdup(name);
 
   /* record comms */
-  erset* setptr = (erset*) ER_MALLOC(sizeof(erset));
   setptr->comm_world = comm_world;
   setptr->comm_store = comm_store;
 
+  /* record scheme id (only valid if DIRECTION is ENCODE) */
+  setptr->scheme_id = scheme_id;
+
+  /* bump set counter */
+  er_set_counter++;
+
   /* add an entry for this set */
   kvtree* set = kvtree_set_kv_int(er_sets, "SETS", er_set_counter);
-
-  /* record operation direction */
-  kvtree_util_set_str(set, "NAME", name);
-
-  /* record operation direction */
-  kvtree_util_set_int(set, "DIRECTION", direction);
 
   /* record pointer to our structure */
   kvtree_util_set_ptr(set, "STRUCT", setptr);
@@ -311,9 +398,6 @@ int ER_Create(MPI_Comm comm_world, MPI_Comm comm_store, const char* name, int di
   /* when encoding, we need to remember the scheme,
    * it's implied by name on rebuild */
   if (direction == ER_DIRECTION_ENCODE) {
-    /* record scheme id */
-    kvtree_util_set_int(set, "SCHEME", scheme_id);
-
     /* look up entry for this scheme id */
     kvtree* scheme = kvtree_get_kv_int(er_schemes, "SCHEMES", scheme_id);
     if (! scheme) {
@@ -325,9 +409,9 @@ int ER_Create(MPI_Comm comm_world, MPI_Comm comm_store, const char* name, int di
   /* return set id to caller, -1 if error */
   int ret = er_set_counter;
   if (rc != ER_SUCCESS) {
-    /* failed to create set, so delete it from our list */
+    /* failed to create set, so delete it from our list and free object */
     kvtree_unset_kv_int(er_sets, "SETS", er_set_counter);
-    er_free(&setptr);
+    erset_delete(&setptr);
     ret = -1;
   }
 
@@ -345,10 +429,17 @@ int ER_Add(int set_id, const char* file)
   }
 
   /* lookup set id */
-  kvtree* set = kvtree_get_kv_int(er_sets, "SETS", set_id);
+  erset* set = erset_get(set_id);
   if (set) {
+    /* check that we're in the right state */
+    if (set->api_state != ER_API_STATE_CREATED) {
+      /* wrong state */
+      er_err("ER_Add called in wrong order");
+      return ER_FAILURE;
+    }
+
     /* add file to set */
-    kvtree_set_kv(set, "FILE", file);
+    kvtree_set_kv(set->files, "FILE", file);
 
     /* TODO: capture current working dir? */
   } else {
@@ -524,13 +615,17 @@ int ER_Dispatch(int set_id)
   int rc = ER_SUCCESS;
 
   /* lookup set id */
-  kvtree* set = kvtree_get_kv_int(er_sets, "SETS", set_id);
+  erset* set = erset_get(set_id);
   if (set) {
-    /* get name of set */
-    char* name = NULL;
-    if (kvtree_util_get_str(set, "NAME", &name) != KVTREE_SUCCESS) {
-      rc = ER_FAILURE;
+    /* check that we're in the right state */
+    if (set->api_state != ER_API_STATE_CREATED) {
+      /* wrong state */
+      er_err("ER_Dispatch called in wrong order");
+      return ER_FAILURE;
     }
+
+    /* get name of set */
+    const char* name = set->name;
 
     /* TODO: allow caller to specify this prefix? */
     /* define prefix to use on all metadata files */
@@ -538,25 +633,15 @@ int ER_Dispatch(int set_id)
     snprintf(path, sizeof(path), "%s.er", name);
 
     /* get operation (encode, rebuild, remove) */
-    int direction = 0;
-    if (kvtree_util_get_int(set, "DIRECTION", &direction) != KVTREE_SUCCESS) {
-      rc = ER_FAILURE;
-    }
+    int direction = set->type;
 
     /* get world and store communicators */
-    MPI_Comm comm_world = MPI_COMM_NULL;
-    MPI_Comm comm_store = MPI_COMM_NULL;
-    erset* setptr;
-    if (kvtree_util_get_ptr(set, "STRUCT", (void**)&setptr) == KVTREE_SUCCESS) {
-      comm_world = setptr->comm_world;
-      comm_store = setptr->comm_store;
-    } else {
-      rc = ER_FAILURE;
-    }
+    MPI_Comm comm_world = set->comm_world;
+    MPI_Comm comm_store = set->comm_store;
 
     if (direction == ER_DIRECTION_ENCODE) {
       /* determine number of files */
-      kvtree* files_hash = kvtree_get(set, "FILE");
+      kvtree* files_hash = kvtree_get(set->files, "FILE");
       int num_files = kvtree_size(files_hash);
 
       /* allocate space for file names */
@@ -575,24 +660,13 @@ int ER_Dispatch(int set_id)
       }
 
       /* get scheme id */
-      int scheme_id = 0;
-      if (kvtree_util_get_int(set, "SCHEME", &scheme_id) != KVTREE_SUCCESS) {
-        rc = ER_FAILURE;
-      }
+      int scheme_id = set->scheme_id;
 
       /* get scheme */
-      kvtree* scheme = kvtree_get_kv_int(er_schemes, "SCHEMES", scheme_id);
-      if (scheme) {
-        /* get redundancy descriptor from scheme */
-        redset* dptr = NULL;
-        if (kvtree_util_get_ptr(scheme, "PTR", (void**)&dptr) != KVTREE_SUCCESS) {
-          rc = ER_FAILURE;
-        }
-
+      redset* dptr = erscheme_get(scheme_id);
+      if (dptr) {
         /* apply redundancy to files */
-        if (rc == ER_SUCCESS) {
-          rc = er_encode(comm_world, comm_store, num_files, filenames, path, *dptr);
-        }
+        rc = er_encode(comm_world, comm_store, num_files, filenames, path, *dptr);
       } else {
         /* failed to find scheme id for this set */
         rc = ER_FAILURE;
@@ -608,6 +682,12 @@ int ER_Dispatch(int set_id)
       /* delete metadata added when encoding files */
       rc = er_remove(comm_world, comm_store, path);
     }
+
+    /* update our state */
+    set->api_state = ER_API_STATE_DISPATCHED;
+
+    /* save rc for TEST and WAIT calls */
+    set->rc = rc;
   } else {
     /* failed to find set id */
     rc = ER_FAILURE;
@@ -620,26 +700,76 @@ int ER_Dispatch(int set_id)
  * returns 1 if done, 0 otherwise */
 int ER_Test(int set_id)
 {
+  /* lookup our set */
+  erset* set = erset_get(set_id);
+  if (set) {
+    /* check that we're in the right state */
+    if (set->api_state != ER_API_STATE_DISPATCHED) {
+      /* wrong state */
+      er_err("ER_Test called in wrong order");
+      return 0;
+    }
+
+    /* TODO: test if done */
+
+    /* update our state to completed */
+    set->api_state = ER_API_STATE_COMPLETED;
+  } else {
+    /* failed to find set id */
+    return 0;
+  }
+
   return 1;
 }
 
 /* wait for ongoing dispatch operation to finish */
 int ER_Wait(int set_id)
 {
-  return ER_SUCCESS;
+  int rc = ER_FAILURE;
+
+  /* lookup our set */
+  erset* set = erset_get(set_id);
+  if (set) {
+    /* check that we're in the right state */
+    if (set->api_state != ER_API_STATE_DISPATCHED) {
+      /* wrong state */
+      er_err("ER_Wait called in wrong order");
+      return ER_FAILURE;
+    }
+
+    /* TODO: wait on operation */
+
+    /* update our state to completed */
+    set->api_state = ER_API_STATE_COMPLETED;
+
+    /* pass return code back to caller */
+    rc = set->rc;
+  } else {
+    /* failed to find set id */
+    return ER_FAILURE;
+  }
+
+  return rc;
 }
 
 /* free internal resources associated with set id */
 int ER_Free(int set_id)
 {
-  /* free resources associated with set */
-  kvtree* set = kvtree_get_kv_int(er_sets, "SETS", set_id);
+  /* lookup our set */
+  erset* set = erset_get(set_id);
   if (set) {
-    /* free struct attached to set, if any */
-    erset* setptr;
-    if (kvtree_util_get_ptr(set, "STRUCT", (void**)&setptr) == KVTREE_SUCCESS) {
-      er_free(&setptr);
+    /* check that we're in the right state */
+    if (set->api_state != ER_API_STATE_COMPLETED) {
+      /* wrong state */
+      er_err("ER_Free called in wrong order");
+      return ER_FAILURE;
     }
+
+    /* free struct attached to set, if any */
+    erset_delete(&set);
+  } else {
+    /* failed to find set id */
+    return ER_FAILURE;
   }
 
   /* delete the set from our list */
