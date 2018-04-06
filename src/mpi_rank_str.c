@@ -591,7 +591,7 @@ static void split_sorted(
  * The groupid value is the same on two different processes
  * if and only if both processes specify the same string.
  * This groupid can be used as a color value in MPI_COMM_SPLIT. */
-int mpi_rank_str(MPI_Comm comm, const char* str, int* groups, int* groupid)
+void mpi_rank_str(MPI_Comm comm, const char* str, int* groups, int* groupid)
 {
   int tag1 = 0;
   int tag2 = 1;
