@@ -12,7 +12,6 @@ LIST(APPEND liber_install_headers
 INSTALL(FILES ${liber_install_headers} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 LIST(APPEND liber_srcs
-    mpi_rank_str.c
     er.c
     er_util.c
 )
