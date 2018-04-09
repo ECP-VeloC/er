@@ -9,6 +9,8 @@ SET(CMAKE_MACOSX_RPATH ON)
 
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+#SET(CMAKE_C_FLAGS "-Wall")
+
 # Configuration Options
 SET(MPI ON)
 # OPTION(MPI "Enable MPI operations for kvtrees" ON)
