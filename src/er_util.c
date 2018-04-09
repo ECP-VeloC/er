@@ -34,8 +34,6 @@ char* er_hostname = NULL;
 int er_mpi_buf_size;
 size_t er_page_size;
 
-static int er_crc_on_copy = 0;
-
 /* print error message to stdout */
 void er_err(const char *fmt, ...)
 {
