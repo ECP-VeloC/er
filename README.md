@@ -60,7 +60,7 @@ To build dependencies:
 
 To build ER:
 
-    cmake -DCMAKE_BUILD_TYPE=Debug -DWITH_KVTREE_PREFIX=`pwd`/install .
+    cmake -DCMAKE_BUILD_TYPE=Debug -DWITH_KVTREE_PREFIX=`pwd`/install -DWITH_REDSET_PREFIX=`pwd`/install -DWITH_SHUFFILE_PREFIX=`pwd`/install .
 
 # Testing
 Some simple test programs exist in the test directory.
