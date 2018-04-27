@@ -281,7 +281,7 @@ int ER_Create_Scheme(
   int encoding_type = REDSET_COPY_NULL;
   if (encoding_blocks < 1) {
     /* no data to be encoded, don't know what to do */
-    return ER_FAILURE;
+    return -1;
   }
   if (erasure_blocks == 0) {
     encoding_type = REDSET_COPY_SINGLE;
@@ -291,7 +291,7 @@ int ER_Create_Scheme(
     encoding_type = REDSET_COPY_XOR;
   } else {
     /* some form of Reed-Solomon that we don't support yet */
-    return ER_FAILURE;
+    return -1;
   }
 
   /* allocate a new redundancy descriptor */
@@ -359,7 +359,7 @@ int ER_Create(MPI_Comm comm_world, MPI_Comm comm_store, const char* name, int di
 
   /* check that we got a name */
   if (name == NULL || strcmp(name, "") == 0) {
-    return ER_FAILURE;
+    return -1;
   }
 
   /* check that we got a valid value for direction */
@@ -367,7 +367,7 @@ int ER_Create(MPI_Comm comm_world, MPI_Comm comm_store, const char* name, int di
       direction != ER_DIRECTION_REBUILD &&
       direction != ER_DIRECTION_REMOVE)
   {
-    return ER_FAILURE;
+    return -1;
   }
 
   /* allocate object for this set */
