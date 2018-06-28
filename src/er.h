@@ -3,6 +3,11 @@
 
 #include "mpi.h"
 
+/* enable C++ codes to include this header directly */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define ER_SUCCESS (0)
 #define ER_FAILURE (1)
 
@@ -63,5 +68,10 @@ int ER_Wait(
 int ER_Free(
   int set_id
 );
+
+/* enable C++ codes to include this header directly */
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif /* ER_H */
