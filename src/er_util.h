@@ -7,7 +7,6 @@
 #define ER_FAILURE (1)
 
 #define ER_MAX_FILENAME (1024)
-#define HOST_NAME_MAX (1024)
 
 extern int er_rank;
 extern char* er_hostname;

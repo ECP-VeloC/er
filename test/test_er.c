@@ -14,6 +14,8 @@
 
 #include "er.h"
 
+#define ER_HOSTNAME (255)
+
 void test_encode(int scheme_id, MPI_Comm world, MPI_Comm store, const char* name, int numfiles, const char** filelist)
 {
   // encode files using redundancy scheme
@@ -60,7 +62,7 @@ void test_rebuild_one_failure_reverse(MPI_Comm world, MPI_Comm store, const char
 
   /* create communicator of all procs on the same host */
   MPI_Comm newstore;
-  char hostname[HOST_NAME_MAX + 1];
+  char hostname[ER_HOSTNAME + 1];
   gethostname(hostname, sizeof(hostname));
   rankstr_mpi_comm_split(newworld, hostname, 0, 0, 1, &newstore);
 
@@ -103,7 +105,7 @@ int main (int argc, char* argv[])
     printf("Error opening file %s: %d %s\n", filename, errno, strerror(errno));
   }
 
-  char hostname[HOST_NAME_MAX + 1];
+  char hostname[ER_HOSTNAME + 1];
   gethostname(hostname, sizeof(hostname));
 
   /* create communicator of all procs on the same host */
