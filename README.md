@@ -1,34 +1,37 @@
 # Encode/Rebuild (ER)
 
 # Overview
-This module defines an interface lets one define redundancy schemes,
-which are identified by an integer ID.
-To encode, one can then apply the redundancy scheme to a list of files and provide a name for the encoded set.
+This module combines the funcitonality of shuffile and redset,
+which lets both migrate and rebuild files within an MPI job.
+It is useful for moving and rebuilding data files on distributed storage, e.g., node-local storage,
+particularly when MPI ranks may be running on different compute nodes than when they originally created their files.
+
+To encode, one defines a redundancy scheme and then applies the redundancy scheme to a list of files also providing a name for the encoded set.
 To rebuild, one specifies the name of the encoded set.
+Additionally, there is a function to remove the encoding information, which is needed when removing a dataset.
 
-Currently, it assumes the parent group of processes is MPI_COMM_WORLD.
+Currently, er assumes the group of processes participating is the same as MPI_COMM_WORLD.
 
-Usage is documented in src/er.h.
+Usage is documented in [src/er.h](src/er.h).
 
 # Building
 
 To build dependencies:
 
-    git clone git@github.com:LLNL/KVTree.git KVTree.git
-    git clone git@xgitlab.cels.anl.gov:ecp-veloc/rankstr.git rankstr.git
-    git clone git@xgitlab.cels.anl.gov:ecp-veloc/redset.git redset.git
-    git clone git@xgitlab.cels.anl.gov:ecp-veloc/shuffile.git shuffile.git
+    git clone git@github.com:ECP-VeloC/KVTree.git   KVTree.git
+    git clone git@github.com:ECP-VeloC/rankstr.git  rankstr.git
+    git clone git@github.com:ECP-VeloC/redset.git   redset.git
+    git clone git@github.com:ECP-VeloC/shuffile.git shuffile.git
 
     mkdir install
 
     rm -rf build
     mkdir build
     cd build
-    cmake -DCMAKE_INSTALL_PREFIX=../install -DMPI=ON ../KVTree.git
+    cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=../install -DMPI=ON ../KVTree.git
     make clean
     make
     make install
-    make test
     cd ..
 
     rm -rf build
@@ -60,7 +63,8 @@ To build dependencies:
 
 To build ER:
 
-    cmake -DCMAKE_BUILD_TYPE=Debug -DWITH_KVTREE_PREFIX=`pwd`/install -DWITH_REDSET_PREFIX=`pwd`/install -DWITH_SHUFFILE_PREFIX=`pwd`/install .
+    cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=./install -DWITH_KVTREE_PREFIX=`pwd`/install -DWITH_REDSET_PREFIX=`pwd`/install -DWITH_SHUFFILE_PREFIX=`pwd`/install .
+    make
 
 # Testing
 Some simple test programs exist in the test directory.
