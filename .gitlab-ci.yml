@@ -4,7 +4,7 @@ job:
     - shell
   script:
     - module load cmake/3.9.2
-    - cmake .. -DWITH_KVTREE_PREFIX=$HOME/kvtree/KVTree.git/install -DWITH_RANKSTR_PREFIX=$HOME/rankstr/rankstr.git/install -DWITH_SHUFFILE_PREFIX=$HOME/shuffile/shuffile.git/install -DWITH_REDSET_PREFIX=$HOME/redset/redset.git/install -DMPI=ON
+    - cmake -DWITH_KVTREE_PREFIX=$HOME/kvtree/KVTree.git/install -DWITH_RANKSTR_PREFIX=$HOME/rankstr/rankstr.git/install -DWITH_SHUFFILE_PREFIX=$HOME/shuffile/shuffile.git/install -DWITH_REDSET_PREFIX=$HOME/redset/redset.git/install -DMPI=ON
  
     - make VERBOSE=1
     - make check
