@@ -127,7 +127,7 @@ int main (int argc, char* argv[])
 
   const char* filelist[1] = { filename };
 
-  if(ER_Init(NULL) != ER_FAILURE) rc = ER_FAILURE;
+  if(ER_Init(NULL) == ER_FAILURE) rc = ER_FAILURE;
 
   char dsetname[256];
   sprintf(dsetname, "/dev/shm/timestep.%d", 1);
