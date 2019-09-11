@@ -12,7 +12,7 @@ Additionally, there is a function to remove the encoding information, which is n
 
 Currently, er assumes the group of processes participating is the same as MPI_COMM_WORLD.
 
-Usage is documented in [src/er.h](src/er.h).
+Usage is documented in [src/er.h](src/er.h) and in the [user API](https://ecp-veloc.github.io/component-user-docs/group__er.html) docs.
 
 # Building
 
