@@ -1,5 +1,7 @@
 # Encode/Rebuild (ER)
 
+[![Build Status](https://api.travis-ci.org/ECP-VeloC/er.png?branch=master)](https://travis-ci.org/ECP-VeloC/er)
+
 # Overview
 This module combines the funcitonality of shuffile and redset,
 which lets both migrate and rebuild files within an MPI job.
