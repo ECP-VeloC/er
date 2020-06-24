@@ -237,7 +237,7 @@ int ER_Init(const char* conf_file)
   return ER_SUCCESS;
 }
 
-int ER_Finalize()
+int ER_Finalize(void)
 {
   /* TODO: free descriptors for any outstanding schemes,
    * probably need to do this in same order on all procs,
