@@ -28,6 +28,11 @@ extern "C" {
 #define ER_DIRECTION_REBUILD (2)
 #define ER_DIRECTION_REMOVE  (3)
 
+#define ER_KEY_CONFIG_DEBUG "DEBUG"
+#define ER_KEY_CONFIG_SET_SIZE "SET_SIZE"
+#define ER_KEY_CONFIG_MPI_BUF_SIZE "MPI_BUF_SIZE"
+#define ER_KEY_CONFIG_CRC_ON_COPY "CRC_ON_COPY"
+
 int ER_Init(
   const char* conf_file /**< [IN] - path to configuration file (can be NULL for default) */
 );
@@ -40,6 +45,34 @@ int ER_Create_Scheme(
   const char* failure_domain, /**< [IN] - processes with same value of failure_domain are assumed to fail at the same time */
   int data_blocks,            /**< [IN] - number of original data blocks */
   int erasure_blocks          /**< [IN] - number of erasure blocks to be generated */
+);
+
+/* needs to be above doxygen comment to get association right */
+typedef struct kvtree_struct kvtree;
+
+/**
+ * Get/set ER configuration values.
+ *
+ * The following configuration options can be set (type in parenthesis):
+ *   * "DEBUG" (int) - if non-zero, output debug information from inside
+ *     ER.
+ *   * "SETSIZE" (int) - set size for ER to use.
+ *   * "MPI_BUF_SIZE" (byte count [IN], int [OUT]) - MPI buffer size to chunk
+ *     file transfer. Must not exceed INT_MAX.
+ *   .
+ * Symbolic names ER_KEY_CONFIG_FOO are defined in er.h and should
+ * be used instead of the strings whenever possible to guard against typos in
+ * strings.
+ *
+ * \result If config != NULL, then return config on success.  If config == NULL
+ *         (you're querying the config) then return a new kvtree on success,
+ *         which must be kvtree_delete()ed by the caller. NULL on any failures.
+ * \param config The new configuration. If config == NULL, then return a new
+ *               kvtree with all the configuration values.
+ *
+ */
+kvtree* ER_Config(
+  const kvtree* config /** [IN] - kvtree of options */
 );
 
 int ER_Free_Scheme(
