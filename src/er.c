@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -278,6 +279,155 @@ int ER_Finalize(void)
   return ER_SUCCESS;
 }
 
+/** Set ER config parameters */
+static kvtree* ER_Config_Set(const kvtree* config)
+{
+  kvtree* retval = (kvtree*)config;
+  assert(retval != NULL);
+
+  static const char* known_options[] = {
+    ER_KEY_CONFIG_DEBUG,
+    ER_KEY_CONFIG_SET_SIZE,
+    ER_KEY_CONFIG_MPI_BUF_SIZE,
+    ER_KEY_CONFIG_CRC_ON_COPY,
+    NULL
+  };
+
+  /* read out all options we know about */
+  /* TODO: this could be turned into a list of structs */
+  kvtree_util_get_int(config, ER_KEY_CONFIG_DEBUG, &er_debug);
+
+  kvtree_util_get_int(config, ER_KEY_CONFIG_SET_SIZE, &er_set_size);
+
+  unsigned long ul;
+  if (kvtree_util_get_bytecount(config, ER_KEY_CONFIG_MPI_BUF_SIZE, &ul) ==
+      KVTREE_SUCCESS)
+  {
+    er_mpi_buf_size = (int) ul;
+    if (er_mpi_buf_size != ul) {
+      char *value;
+      kvtree_util_get_str(config, ER_KEY_CONFIG_MPI_BUF_SIZE, &value);
+      er_err("Value '%s' passed for %s exceeds int range @ %s:%d",
+        value, ER_KEY_CONFIG_MPI_BUF_SIZE, __FILE__, __LINE__
+      );
+      retval = NULL;
+    }
+  }
+  /* TODO: handle ER_KEY_CONFIG_CRC_ON_COPY */
+
+  /* pass options to redset */
+  kvtree* redset_config_values = kvtree_new();
+
+  kvtree_util_set_int(redset_config_values,
+    REDSET_KEY_CONFIG_DEBUG, er_debug);
+
+  kvtree_util_set_int(redset_config_values,
+    REDSET_KEY_CONFIG_SET_SIZE, er_set_size);
+
+  kvtree_util_set_int(redset_config_values,
+    REDSET_KEY_CONFIG_MPI_BUF_SIZE, er_mpi_buf_size);
+
+  if (redset_config(redset_config_values) == NULL) {
+    retval = NULL;
+  }
+
+  kvtree_delete(&redset_config_values);
+
+  /* pass options to shuffile */
+  kvtree* shuffile_config_values = kvtree_new();
+
+  kvtree_util_set_int(shuffile_config_values,
+    SHUFFILE_KEY_CONFIG_MPI_BUF_SIZE, er_mpi_buf_size);
+
+  kvtree_util_set_int(shuffile_config_values,
+    SHUFFILE_KEY_CONFIG_DEBUG, er_debug);
+
+  if (shuffile_config(shuffile_config_values) == NULL) {
+    retval = NULL;
+  }
+
+  kvtree_delete(&shuffile_config_values);
+
+  /* report all unknown options (typos?) */
+  const kvtree_elem* elem;
+  for (elem = kvtree_elem_first(config);
+       elem != NULL;
+       elem = kvtree_elem_next(elem))
+  {
+    /* must be only one level deep, ie plain kev = value */
+    const kvtree* elem_hash = kvtree_elem_hash(elem);
+    assert(kvtree_size(elem_hash) == 1);
+
+    const kvtree* kvtree_first_elem_hash =
+      kvtree_elem_hash(kvtree_elem_first(elem_hash));
+    assert(kvtree_size(kvtree_first_elem_hash) == 0);
+
+    /* check against known options */
+    const char** opt;
+    int found = 0;
+    for (opt = known_options; *opt != NULL; opt++) {
+      if (strcmp(*opt, kvtree_elem_key(elem)) == 0) {
+        found = 1;
+        break;
+      }
+    }
+    if (! found) {
+      er_err("Unknown configuration parameter '%s' with value '%s' @ %s:%d",
+        kvtree_elem_key(elem),
+        kvtree_elem_key(kvtree_elem_first(kvtree_elem_hash(elem))),
+        __FILE__, __LINE__
+      );
+      retval = NULL;
+    }
+  }
+
+  return retval;
+}
+
+/** Get ER config parameters */
+static kvtree* ER_Config_Get(void)
+{
+  kvtree* retval = kvtree_new();
+  assert(retval != NULL);
+
+  int success = 1;
+
+  if (kvtree_util_set_int(retval, ER_KEY_CONFIG_DEBUG, er_debug) !=
+    KVTREE_SUCCESS)
+  {
+    success = 0;
+  }
+
+  if (kvtree_util_set_int(retval, ER_KEY_CONFIG_SET_SIZE, er_set_size) !=
+    KVTREE_SUCCESS)
+  {
+    success = 0;
+  }
+
+  if (kvtree_util_set_int(retval, ER_KEY_CONFIG_MPI_BUF_SIZE,
+    er_mpi_buf_size) != KVTREE_SUCCESS)
+  {
+    success = 0;
+  }
+
+  if (!success) {
+    kvtree_delete(&retval);
+  }
+
+  return retval;
+}
+
+/** Get / Set ER config parameters */
+kvtree* ER_Config(const kvtree* config)
+{
+  if (config != NULL) {
+    return ER_Config_Set(config);
+  } else {
+    return ER_Config_Get();
+  }
+  return NULL; /* NOTREACHED */
+}
+
 int ER_Create_Scheme(
   MPI_Comm comm,
   const char* failure_domain,
@@ -307,22 +457,19 @@ int ER_Create_Scheme(
   /* allocate a new redundancy descriptor */
   redset* d = ER_MALLOC(sizeof(redset));
 
-  /* hard code the redset minimum set size to 8 */
-  int set_size = 8;
-
   int redset_rc = REDSET_SUCCESS;
   if (erasure_blocks == 0) {
     /* SINGLE */
     redset_rc = redset_create_single(comm, failure_domain, d);
   } else if (data_blocks == erasure_blocks) {
     /* PARTNER */
-    redset_rc = redset_create_partner(comm, failure_domain, set_size, 1, d);
+    redset_rc = redset_create_partner(comm, failure_domain, er_set_size, 1, d);
   } else if (erasure_blocks == 1) {
     /* XOR */
-    redset_rc = redset_create_xor(comm, failure_domain, set_size, d);
+    redset_rc = redset_create_xor(comm, failure_domain, er_set_size, d);
   } else if (erasure_blocks < data_blocks) {
     /* Reed-Solomon */
-    redset_rc = redset_create_rs(comm, failure_domain, set_size, erasure_blocks, d);
+    redset_rc = redset_create_rs(comm, failure_domain, er_set_size, erasure_blocks, d);
   } else {
     /* some form of Reed-Solomon that we don't support yet */
     er_free(&d);

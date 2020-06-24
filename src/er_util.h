@@ -12,11 +12,15 @@
 
 #define ER_MAX_FILENAME (1024)
 
+extern int er_debug;
+
 extern int er_rank;
 extern char* er_hostname;
 
 extern int er_mpi_buf_size;
 extern size_t er_page_size;
+
+extern int er_set_size;
 
 /** print error message to stdout */
 void er_err(const char *fmt, ...);
