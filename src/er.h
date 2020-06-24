@@ -32,7 +32,7 @@ int ER_Init(
   const char* conf_file /**< [IN] - path to configuration file (can be NULL for default) */
 );
 
-int ER_Finalize();
+int ER_Finalize(void);
 
 /** defines a redundancy scheme, returns scheme id as integer */
 int ER_Create_Scheme(
