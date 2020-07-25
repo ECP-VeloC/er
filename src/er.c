@@ -272,33 +272,41 @@ int ER_Finalize()
 int ER_Create_Scheme(
   MPI_Comm comm,
   const char* failure_domain,
-  int encoding_blocks,
+  int data_blocks,
   int erasure_blocks)
 {
   int rc = ER_SUCCESS;
 
   /* check that we can support the scheme the caller is asking for */
-  int encoding_type = REDSET_COPY_NULL;
-  if (encoding_blocks < 1) {
+  if (data_blocks < 1) {
     /* no data to be encoded, don't know what to do */
-    return -1;
-  }
-  if (erasure_blocks == 0) {
-    encoding_type = REDSET_COPY_SINGLE;
-  } else if (encoding_blocks == erasure_blocks) {
-    encoding_type = REDSET_COPY_PARTNER;
-  } else if (erasure_blocks == 1) {
-    encoding_type = REDSET_COPY_XOR;
-  } else {
-    /* some form of Reed-Solomon that we don't support yet */
     return -1;
   }
 
   /* allocate a new redundancy descriptor */
   redset* d = ER_MALLOC(sizeof(redset));
 
+  int redset_rc = REDSET_SUCCESS;
+  if (erasure_blocks == 0) {
+    /* SINGLE */
+    redset_rc = redset_create_single(comm, failure_domain, d);
+  } else if (data_blocks == erasure_blocks) {
+    /* PARTNER */
+    redset_rc = redset_create_partner(comm, failure_domain, 1, d);
+  } else if (erasure_blocks == 1) {
+    /* XOR */
+    redset_rc = redset_create_xor(comm, failure_domain, 8, d);
+  } else if (erasure_blocks < data_blocks) {
+    /* Reed-Solomon */
+    redset_rc = redset_create_rs(comm, failure_domain, 8, erasure_blocks, d);
+  } else {
+    /* some form of Reed-Solomon that we don't support yet */
+    er_free(&d);
+    return -1;
+  }
+
   /* create the scheme */
-  if (redset_create(encoding_type, comm, failure_domain, d) == REDSET_SUCCESS) {
+  if (redset_rc == REDSET_SUCCESS) {
     /* bump our internal counter */
     er_scheme_counter++;
 
