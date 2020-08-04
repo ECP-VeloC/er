@@ -131,7 +131,7 @@ static void build_shuffile_path(char* file, size_t len, const char* path)
 /* define the path to the redset file for the specified rank */
 static void build_redset_path(char* file, size_t len, const char* path, int rank)
 {
-  snprintf(file, len, "%s.%d", path, rank);
+  snprintf(file, len, "%s.", path);
 }
 
 static void er_state_write(MPI_Comm comm_world, MPI_Comm comm_store, const char* path, int state)
