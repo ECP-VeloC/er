@@ -286,19 +286,22 @@ int ER_Create_Scheme(
   /* allocate a new redundancy descriptor */
   redset* d = ER_MALLOC(sizeof(redset));
 
+  /* hard code the redset minimum set size to 8 */
+  int set_size = 8;
+
   int redset_rc = REDSET_SUCCESS;
   if (erasure_blocks == 0) {
     /* SINGLE */
     redset_rc = redset_create_single(comm, failure_domain, d);
   } else if (data_blocks == erasure_blocks) {
     /* PARTNER */
-    redset_rc = redset_create_partner(comm, failure_domain, 1, d);
+    redset_rc = redset_create_partner(comm, failure_domain, set_size, 1, d);
   } else if (erasure_blocks == 1) {
     /* XOR */
-    redset_rc = redset_create_xor(comm, failure_domain, 8, d);
+    redset_rc = redset_create_xor(comm, failure_domain, set_size, d);
   } else if (erasure_blocks < data_blocks) {
     /* Reed-Solomon */
-    redset_rc = redset_create_rs(comm, failure_domain, 8, erasure_blocks, d);
+    redset_rc = redset_create_rs(comm, failure_domain, set_size, erasure_blocks, d);
   } else {
     /* some form of Reed-Solomon that we don't support yet */
     er_free(&d);
