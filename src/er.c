@@ -764,7 +764,7 @@ int ER_Test(int set_id)
 /* wait for ongoing dispatch operation to finish */
 int ER_Wait(int set_id)
 {
-  int rc = ER_FAILURE;
+  int rc = ER_SUCCESS;
 
   /* lookup our set */
   erset* set = erset_get(set_id);
