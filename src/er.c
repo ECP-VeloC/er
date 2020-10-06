@@ -213,17 +213,11 @@ static void er_state_read(MPI_Comm comm_world, MPI_Comm comm_store, const char* 
 
 int ER_Init(const char* conf_file)
 {
-  /* allocate maps to track scheme and set data */
-  er_schemes = kvtree_new();
-  er_sets    = kvtree_new();
-
   /* initialize the redundancy library */
   if (redset_init() != REDSET_SUCCESS) {
     /* clean up and return */
     er_err("ER_Init redset_init failed @ %s:%d",
       __FILE__, __LINE__);
-    kvtree_free(er_schemes);
-    kvtree_free(er_sets);
     return ER_FAILURE;
   }
 
@@ -232,10 +226,13 @@ int ER_Init(const char* conf_file)
     /* clean up and return */
     er_err("ER_Init shuffile_init failed @ %s:%d",
       __FILE__, __LINE__);
-    kvtree_free(er_schemes);
-    kvtree_free(er_sets);
+    redset_finalize();
     return ER_FAILURE;
   }
+
+  /* allocate maps to track scheme and set data */
+  er_schemes = kvtree_new();
+  er_sets    = kvtree_new();
 
   return ER_SUCCESS;
 }
@@ -302,7 +299,7 @@ int ER_Create_Scheme(
   /* check that we can support the scheme the caller is asking for */
   if (data_blocks < 1) {
     /* no data to be encoded, don't know what to do */
-    er_err("ER_Create_scheme no data to be encoded @ %s:%d",
+    er_err("ER_Create_scheme invalid for data_blocks to be less than 1 @ %s:%d",
       __FILE__, __LINE__);
     return -1;
   }
@@ -355,18 +352,20 @@ int ER_Create_Scheme(
 
 int ER_Free_Scheme(int scheme_id)
 {
+  int rc = ER_SUCCESS;
+
   /* look up entry for this scheme id */
   redset* d = erscheme_get(scheme_id);
   if (d != NULL) {
     /* free reddesc */
     if (redset_delete(d) != REDSET_SUCCESS) {
-      /* TODO: what to do here if redset_delete fails? */
       /* failed to free redundancy descriptor */
       er_err("ER_Free_scheme failed to free redundancy descriptor @ %s:%d",
         __FILE__, __LINE__);
-      kvtree_unset_kv_int(er_schemes, "SCHEMES", scheme_id);
-      return ER_FAILURE;
+      rc = ER_FAILURE;
     }
+
+    /* TODO: what to do here if redset_delete fails? */
 
     /* free the pointer to the redundancy descriptor */
     er_free(&d);
@@ -374,14 +373,13 @@ int ER_Free_Scheme(int scheme_id)
     /* failed to find pointer to reddesc */
     er_err("ER_Free_scheme failed to find pointer to reddesc @ %s:%d",
       __FILE__, __LINE__);
-    kvtree_unset_kv_int(er_schemes, "SCHEMES", scheme_id);
-    return ER_FAILURE;
+    rc = ER_FAILURE;
   }
 
   /* drop scheme entry from our map */
   kvtree_unset_kv_int(er_schemes, "SCHEMES", scheme_id);
 
-  return ER_SUCCESS;
+  return rc;
 }
 
 /* create a named set, and specify whether it should be encoded or recovered */
@@ -456,7 +454,6 @@ int ER_Create(MPI_Comm comm_world, MPI_Comm comm_store, const char* name, int di
 /* adds file to specified set id */
 int ER_Add(int set_id, const char* file)
 {
-
   /* check that we got a file name */
   if (file == NULL || strcmp(file, "") == 0) {
     er_err("ER_Add file parameter is NULL @ %s:%d",
@@ -767,6 +764,8 @@ int ER_Test(int set_id)
 /* wait for ongoing dispatch operation to finish */
 int ER_Wait(int set_id)
 {
+  int rc = ER_FAILURE;
+
   /* lookup our set */
   erset* set = erset_get(set_id);
   if (set) {
@@ -784,11 +783,7 @@ int ER_Wait(int set_id)
     set->api_state = ER_API_STATE_COMPLETED;
 
     /* pass return code back to caller */
-    if (set->rc == ER_FAILURE) {
-      er_err("ER_Wait return code from set is a failure @ %s:%d",
-        __FILE__, __LINE__);
-      return ER_FAILURE;
-    }
+    rc = set->rc;
   } else {
     /* failed to find set id */
     er_err("ER_Wait failed to find set id @ %s:%d",
@@ -796,7 +791,7 @@ int ER_Wait(int set_id)
     return ER_FAILURE;
   }
 
-  return ER_SUCCESS;
+  return rc;
 }
 
 /* free internal resources associated with set id */
@@ -810,8 +805,6 @@ int ER_Free(int set_id)
       /* wrong state */
       er_err("ER_Free called in wrong order @ %s:%d",
         __FILE__, __LINE__);
-      kvtree_unset_kv_int(er_sets, "SETS", set_id);
-      erset_delete(&set);
       return ER_FAILURE;
     }
 
@@ -821,7 +814,6 @@ int ER_Free(int set_id)
     /* failed to find set id */
     er_err("ER_Free failed to find set id @ %s:%d",
       __FILE__, __LINE__);
-    kvtree_unset_kv_int(er_sets, "SETS", set_id);
     return ER_FAILURE;
   }
 
