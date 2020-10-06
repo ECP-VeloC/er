@@ -481,8 +481,8 @@ int ER_Add(int set_id, const char* file)
     /* TODO: capture current working dir? */
   } else {
     /* failed to find set id */
-    er_err("ER_Add failed to find set id @ %s:%d",
-      __FILE__, __LINE__);
+    er_err("ER_Add failed to find set id %d @ %s:%d",
+      set_id, __FILE__, __LINE__);
     return ER_FAILURE;
   }
 
@@ -651,6 +651,8 @@ static int er_remove(MPI_Comm comm_world, MPI_Comm comm_store, const char* path)
 /* initiate encode/rebuild operation on specified set id */
 int ER_Dispatch(int set_id)
 {
+  int rc = ER_SUCCESS;
+
   /* lookup set id */
   erset* set = erset_get(set_id);
   if (set) {
@@ -704,19 +706,10 @@ int ER_Dispatch(int set_id)
       redset* dptr = erscheme_get(scheme_id);
       if (dptr) {
         /* apply redundancy to files */
-        int rc_en = er_encode(comm_world, comm_store, num_files, filenames, path, *dptr);
-        if (rc_en != ER_SUCCESS) {
-          /* clean up and return */
-          er_err("ER_Dispatch er_encode failed %s:%d",
-            __FILE__, __LINE__);
-          er_free(&filenames);
-          return ER_FAILURE;
-        }
+        rc = er_encode(comm_world, comm_store, num_files, filenames, path, *dptr);
       } else {
         /* failed to find scheme id for this set */
-        /* clean up and return */
-        er_free(&filenames);
-        return ER_FAILURE;
+        rc = ER_FAILURE;
       }
 
       /* free list of file names */
@@ -724,36 +717,25 @@ int ER_Dispatch(int set_id)
     } else if (direction == ER_DIRECTION_REBUILD) {
       /* migrate files to new rank locations (if needed),
        * and rebuild missing files (if needed) */
-      int rc_reb = er_rebuild(comm_world, comm_store, path);
-      if (rc_reb != ER_SUCCESS) {
-        er_err("ER_Dispatch er_rebuild failed %s:%d",
-          __FILE__, __LINE__);
-        return ER_FAILURE;
-      }
+      rc = er_rebuild(comm_world, comm_store, path);
     } else {
       /* delete metadata added when encoding files */
-      int rc_rem = er_remove(comm_world, comm_store, path);
-      if (rc_rem != ER_SUCCESS) {
-        er_err("ER_Dispatch er_remove failed %s:%d",
-          __FILE__, __LINE__);
-        return ER_FAILURE;
-      }
+      rc = er_remove(comm_world, comm_store, path);
     }
 
     /* update our state */
     set->api_state = ER_API_STATE_DISPATCHED;
 
     /* save rc for TEST and WAIT calls */
-    /* if we got here, we are still good */
-    set->rc = ER_SUCCESS;
+    set->rc = rc;
   } else {
     /* failed to find set id */
     er_err("ER_Dispatch failed to find set id @ %s:%d",
       __FILE__, __LINE__);
-    return ER_FAILURE;
+    rc = ER_FAILURE;
   }
 
-  return ER_SUCCESS;
+  return rc;
 }
 
 /* tests whether ongoing dispatch operation to finish,
