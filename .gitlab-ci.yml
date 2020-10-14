@@ -1,0 +1,37 @@
+slurm-job:
+  tags:
+    - quartz
+    - batch
+  variables:
+     LLNL_SLURM_SCHEDULER_PARAMETERS: "-N 3 -p pbatch"
+  script:
+    - ./buildme_deps
+    - source /etc/profile.d/z00_lmod.sh
+    - set -x
+    - installdir=`pwd`/install
+    - rm -rf build
+    - mkdir build
+    - cd build
+    - cmake -DWITH_AXL_PREFIX=../install -DCMAKE_INSTALL_PREFIX=$installdir -DVELOC_RESOURCE_MANAGER=SLURM -DCMAKE_BUILD_TYPE=Debug  -DOPENSSL_ROOT_DIR=/usr -DCMAKE_VERBOSE_BUILD=1 ..
+    - make
+    - make install
+    - make check
+lsf-job:
+  tags:
+    - lassen
+    - batch
+  variables:
+     LLNL_LSF_SCHEDULER_PARAMETERS: "-nnodes 3 -q pbatch"
+  script:
+    - ./buildme_deps
+    - source /etc/profile.d/z00_lmod.sh
+    - set -x
+    - installdir=`pwd`/install
+    - rm -rf build
+    - mkdir build
+    - cd build
+    - cmake -DWITH_AXL_PREFIX=../install -DCMAKE_INSTALL_PREFIX=$installdir -DVELOC_RESOURCE_MANAGER=LSF -DCMAKE_BUILD_TYPE=Debug  -DOPENSSL_ROOT_DIR=/usr -DCMAKE_VERBOSE_BUILD=1 ..
+    - make
+    - make install
+    - make check
+

@@ -16,32 +16,87 @@
 
 #define ER_HOSTNAME (255)
 
-void test_encode(int scheme_id, MPI_Comm world, MPI_Comm store, const char* name, int numfiles, const char** filelist)
+#define TEST_PASS (0)
+#define TEST_FAIL (1)
+
+int test_null(MPI_Comm comm_host, char* hostname){
+  ER_Init(NULL);
+  if(ER_Create_Scheme(comm_host, NULL, 1, 1) != -1){
+    printf ("Error in line %d, file %s, function %s.\n", __LINE__, __FILE__, __func__);
+    printf("ER_Create_Scheme succeded with NULL failure_domain parameter\n");
+    return TEST_FAIL;
+  }
+  if(ER_Create_Scheme(MPI_COMM_NULL, hostname, 1, 1) != -1){
+    printf ("Error in line %d, file %s, function %s.\n", __LINE__, __FILE__, __func__);
+    printf("ER_Create_Scheme succeded with MPI_COMM_NULL comm parameter\n");
+    return TEST_FAIL;
+  }
+  if(ER_Create(comm_host, comm_host, NULL, 0, 0) != -1){
+    printf ("Error in line %d, file %s, function %s.\n", __LINE__, __FILE__, __func__);
+    printf("ER_Create succeded with NULL name parameter\n");
+    return TEST_FAIL;
+  }
+  if(ER_Create(MPI_COMM_NULL, comm_host, hostname, 0, 0) != -1){
+    printf ("Error in line %d, file %s, function %s.\n", __LINE__, __FILE__, __func__);
+    printf("ER_Create succeded with MPI_COMM_NULL comm_world parameter\n");
+    return TEST_FAIL;
+  }
+  if(ER_Create(comm_host, MPI_COMM_NULL, hostname, 0, 0) != -1){
+    printf ("Error in line %d, file %s, function %s.\n", __LINE__, __FILE__, __func__);
+    printf("ER_Create succeded with MPI_COMM_NULL comm_store parameter\n");
+    return TEST_FAIL;
+  }
+  if(ER_Add(0, NULL) != ER_FAILURE){
+    printf ("Error in line %d, file %s, function %s.\n", __LINE__, __FILE__, __func__);
+    printf("ER_Add succeded with NULL file parameter\n");
+    return TEST_FAIL;
+  }
+
+  ER_Finalize();
+  return TEST_PASS;
+}
+
+int test_encode(int scheme_id, MPI_Comm world, MPI_Comm store, const char* name, int numfiles, const char** filelist)
 {
   // encode files using redundancy scheme
   int set_id = ER_Create(world, store, name, ER_DIRECTION_ENCODE, scheme_id);
+  if(set_id == -1)
+    return TEST_FAIL;
 
   int i;
   for (i = 0; i < numfiles; i++) {
     const char* file = filelist[i];
-    ER_Add(set_id, file);
+    if(ER_Add(set_id, file) == ER_FAILURE){
+      return TEST_FAIL;
+    }
   }
-
-  ER_Dispatch(set_id);
-  ER_Wait(set_id);
-  ER_Free(set_id);
+  
+  if(ER_Dispatch(set_id) == ER_FAILURE){
+      return TEST_FAIL;
+  }
+  if(ER_Wait(set_id) == ER_FAILURE){
+      return TEST_FAIL;
+  }
+  if(ER_Free(set_id) == ER_FAILURE){
+      return TEST_FAIL;
+  }
+  return TEST_PASS;
 }
 
-void test_rebuild_no_failure(MPI_Comm world, MPI_Comm store, const char* name)
+int test_rebuild_no_failure(MPI_Comm world, MPI_Comm store, const char* name)
 {
   // rebuild encoded files (and redundancy data)
   int set_id = ER_Create(world, store, name, ER_DIRECTION_REBUILD, 0);
-  ER_Dispatch(set_id);
-  ER_Wait(set_id);
-  ER_Free(set_id);
+  if(ER_Dispatch(set_id) == ER_FAILURE)
+      return TEST_FAIL;
+  if(ER_Wait(set_id) == ER_FAILURE)
+      return TEST_FAIL;
+  if(ER_Free(set_id) == ER_FAILURE)
+      return TEST_FAIL;
+  return TEST_PASS;
 }
 
-void test_rebuild_one_failure_reverse(MPI_Comm world, MPI_Comm store, const char* name, int numfiles, const char** filelist)
+int test_rebuild_one_failure_reverse(MPI_Comm world, MPI_Comm store, const char* name, int numfiles, const char** filelist)
 {
   int rank, ranks;
   MPI_Comm_rank(world, &rank);
@@ -68,24 +123,33 @@ void test_rebuild_one_failure_reverse(MPI_Comm world, MPI_Comm store, const char
 
   // rebuild encoded files (and redundancy data)
   int set_id = ER_Create(newworld, newstore, name, ER_DIRECTION_REBUILD, 0);
-  ER_Dispatch(set_id);
-  ER_Wait(set_id);
-  ER_Free(set_id);
+  if(ER_Dispatch(set_id) == ER_FAILURE)
+      return TEST_FAIL;
+  if(ER_Wait(set_id) == ER_FAILURE)
+      return TEST_FAIL;
+  if(ER_Free(set_id) == ER_FAILURE)
+      return TEST_FAIL;
 
   MPI_Comm_free(&newstore);
   MPI_Comm_free(&newworld);
+  return TEST_PASS;
 }
 
-void test_remove_no_failure(MPI_Comm world, MPI_Comm store, const char* name)
+int test_remove_no_failure(MPI_Comm world, MPI_Comm store, const char* name)
 {
   int set_id = ER_Create(world, store, name, ER_DIRECTION_REMOVE, 0);
-  ER_Dispatch(set_id);
-  ER_Wait(set_id);
-  ER_Free(set_id);
+  if(ER_Dispatch(set_id) == ER_FAILURE)
+      return TEST_FAIL;
+  if(ER_Wait(set_id) == ER_FAILURE)
+      return TEST_FAIL;
+  if(ER_Free(set_id) == ER_FAILURE)
+      return TEST_FAIL;
+  return TEST_PASS;
 }
 
 int main (int argc, char* argv[])
 {
+  int rc = TEST_PASS;
   MPI_Init(&argc, &argv);
 
   int rank, ranks;
@@ -103,6 +167,7 @@ int main (int argc, char* argv[])
     close(fd);
   } else {
     printf("Error opening file %s: %d %s\n", filename, errno, strerror(errno));
+    rc = TEST_FAIL;
   }
 
   char hostname[ER_HOSTNAME + 1];
@@ -125,29 +190,42 @@ int main (int argc, char* argv[])
   int scheme_id = ER_Create_Scheme(MPI_COMM_WORLD, hostname, ranks, ranks);
 
   // encode files using redundancy scheme
-  test_encode(scheme_id, MPI_COMM_WORLD, comm_host, dsetname, 1, filelist);
+  if(test_encode(scheme_id, MPI_COMM_WORLD, comm_host, dsetname, 1, filelist) !=TEST_PASS){
+    rc = TEST_FAIL;
+  }
 
   // rebuild encoded files (and redundancy data)
-  test_rebuild_no_failure(MPI_COMM_WORLD, comm_host, dsetname);
+  if(test_rebuild_no_failure(MPI_COMM_WORLD, comm_host, dsetname) !=TEST_PASS){
+    rc = TEST_FAIL;
+  }
 
   // delete redundancy data added during ENCODE
-  test_remove_no_failure(MPI_COMM_WORLD, comm_host, dsetname);
+  if(test_remove_no_failure(MPI_COMM_WORLD, comm_host, dsetname) !=TEST_PASS){
+    rc = TEST_FAIL;
+  }
 
   // encode files using redundancy scheme
-  test_encode(scheme_id, MPI_COMM_WORLD, comm_host, dsetname, 1, filelist);
+  if(test_encode(scheme_id, MPI_COMM_WORLD, comm_host, dsetname, 1, filelist) !=TEST_PASS){
+    rc = TEST_FAIL;
+  }
 
   // rebuild encoded files (and redundancy data)
-  test_rebuild_one_failure_reverse(MPI_COMM_WORLD, comm_host, dsetname, 1, filelist);
+  if(test_rebuild_one_failure_reverse(MPI_COMM_WORLD, comm_host, dsetname, 1, filelist) !=TEST_PASS){
+    rc = TEST_FAIL;
+  } 
 
   ER_Free_Scheme(scheme_id);
 
   ER_Finalize();
 
   unlink(filename);
+  
+  if(test_null(comm_host, hostname) != TEST_PASS)
+    return TEST_FAIL;
 
   MPI_Comm_free(&comm_host);
 
   MPI_Finalize();
 
-  return 0;
+  return rc;
 }

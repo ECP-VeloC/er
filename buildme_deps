@@ -1,0 +1,77 @@
+#!/bin/bash
+
+source /etc/profile.d/z00_lmod.sh
+module load gcc/8.1.0
+#module load gcc/7.1.0
+#module load cmake/3.9.2
+
+set -x
+
+installdir=`pwd`/install
+
+mkdir install
+
+mkdir deps
+cd deps
+
+depsdir=`pwd`
+
+if [ ! -d KVTree ] ; then
+  git clone git@github.com:ECP-Veloc/KVTree.git KVTree
+fi
+if [ ! -d rankstr ] ; then
+  git clone git@github.com:ECP-Veloc/rankstr.git rankstr
+fi
+if [ ! -d redset ] ; then
+  git clone git@github.com:ECP-Veloc/redset.git redset
+fi
+if [ ! -d shuffile ] ; then
+  git clone git@github.com:ECP-Veloc/shuffile.git shuffile
+fi
+
+rm -rf KVTree/build
+mkdir KVTree/build
+
+cd KVTree/build
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-O0" -DCMAKE_INSTALL_PREFIX=$installdir -DMPI=ON ..
+make clean
+make
+make install
+#make check 
+cd $depsdir
+
+rm -rf rankstr/build
+mkdir rankstr/build
+
+# rankstr
+cd rankstr/build
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-O0" -DCMAKE_INSTALL_PREFIX=$installdir -DMPI=ON ..
+make clean
+make
+make install
+#make test
+cd $depsdir 
+
+rm -rf redset/build
+mkdir redset/build
+
+# redset
+cd redset/build
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-O0" -DCMAKE_INSTALL_PREFIX=$installdir -DWITH_KVTREE_PREFIX=$installdir -DMPI=ON ..
+make clean
+make
+make install
+#make test
+cd $depsdir
+
+rm -rf shuffile/build
+mkdir shuffile/build
+
+# shuffile
+cd shuffile/build
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-O0" -DCMAKE_INSTALL_PREFIX=$installdir -DWITH_KVTREE_PREFIX=$installdir -DMPI=ON ..
+make clean
+make
+make install
+#make test
+cd $depsdir
