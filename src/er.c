@@ -461,15 +461,16 @@ int ER_Create_Scheme(
   if (erasure_blocks == 0) {
     /* SINGLE */
     redset_rc = redset_create_single(comm, failure_domain, d);
-  } else if (data_blocks == erasure_blocks) {
-    /* PARTNER */
-    redset_rc = redset_create_partner(comm, failure_domain, er_set_size, 1, d);
   } else if (erasure_blocks == 1) {
     /* XOR */
     redset_rc = redset_create_xor(comm, failure_domain, er_set_size, d);
   } else if (erasure_blocks < data_blocks) {
     /* Reed-Solomon */
     redset_rc = redset_create_rs(comm, failure_domain, er_set_size, erasure_blocks, d);
+  } else if (erasure_blocks % data_blocks == 0) {
+    /* PARTNER */
+    int replicas = erasure_blocks / data_blocks;
+    redset_rc = redset_create_partner(comm, failure_domain, er_set_size, replicas, d);
   } else {
     /* some form of Reed-Solomon that we don't support yet */
     er_free(&d);
