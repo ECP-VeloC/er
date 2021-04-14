@@ -24,6 +24,8 @@ extern "C" {
 #define ER_SUCCESS (0)
 #define ER_FAILURE (1)
 
+#define ER_VERSION "0.0.4"
+
 #define ER_DIRECTION_ENCODE  (1)
 #define ER_DIRECTION_REBUILD (2)
 #define ER_DIRECTION_REMOVE  (3)
