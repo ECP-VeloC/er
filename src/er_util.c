@@ -24,8 +24,6 @@
 #include "er.h"
 #include "er_util.h"
 
-#define ER_VERSION "1.0"
-
 int er_debug = 1;
 
 int er_rank = -1;
