@@ -19,7 +19,19 @@ SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # Configuration Options
 SET(MPI ON)
 # OPTION(MPI "Enable MPI operations for kvtrees" ON)
-OPTION(ER_LINK_STATIC "Default to static linking? (Needed for Cray)" OFF)
+
+OPTION(BUILD_SHARED_LIBS "Whether to build shared libraries" ON)
+MESSAGE(STATUS "BUILD_SHARED_LIBS: ${BUILD_SHARED_LIBS}")
+
+if (BUILD_SHARED_LIBS)
+   OPTION(ER_LINK_STATIC "Default to static linking? (Needed for Cray)" OFF)
+else()
+   OPTION(ER_LINK_STATIC "Default to static linking? (Needed for Cray)" ON)
+endif()
+MESSAGE(STATUS "ER_LINK_STATIC: ${ER_LINK_STATIC}")
+
+OPTION(ENABLE_TESTS "Whether to build tests" ON)
+MESSAGE(STATUS "ENABLE_TESTS: ${ENABLE_TESTS}")
 
 # Find Packages & Files
 
