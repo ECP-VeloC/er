@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
 #include "er.h"
 #include "er_util.h"
 
