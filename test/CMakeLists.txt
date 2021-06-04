@@ -10,15 +10,15 @@ ELSE()
 ENDIF()
 
 ADD_EXECUTABLE(test_config test_config.c)
-
 TARGET_LINK_LIBRARIES(test_config ${er_lib})
+
+ADD_EXECUTABLE(er_test test_er.c)
+TARGET_LINK_LIBRARIES(er_test ${ER_EXTERNAL_LIBS} ${er_lib})
 
 ################
 # Add tests to ctest
 ################
 
-ADD_EXECUTABLE(er_test test_er.c)
-TARGET_LINK_LIBRARIES(er_test ${RANKSTR_EXTERNAL_LIBS} ${er_lib})
 ER_ADD_TEST(er_test 256 "")
 #ADD_TEST(NAME er_test COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 3 -N3 ./er_test)
 
