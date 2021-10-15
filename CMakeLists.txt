@@ -85,8 +85,7 @@ ELSE(MPI_C_FOUND)
     MESSAGE(FATAL_ERROR
         "Could not find MPI! "
         "Either add an MPI compiler to your path "
-        "or force CMake to build using the correct compiler (`export CC=mpicc`). "
-        "To disable MPI, set -DMPI=OFF")
+        "or force CMake to build using the correct compiler (`export CC=mpicc`).")
 ENDIF(MPI_C_FOUND)
 
 ## HEADERS
