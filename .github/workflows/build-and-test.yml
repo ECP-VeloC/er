@@ -1,0 +1,61 @@
+name: er build and test
+
+permissions:
+  actions: write
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        target: [Debug, Release]
+
+    name: ${{ matrix.os }}-${{ matrix.target }}
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+
+      - name: checkout
+        uses: actions/checkout@v2
+        with:
+          path: er
+          fetch-depth: 0
+
+      - name: get deps
+        uses: ecp-veloc/github-actions/get-scr-os-deps@main
+        with:
+          os: ${{ matrix.os }}
+
+      - name: install kvtree
+        uses: ecp-veloc/github-actions/build-ecp-veloc-component@main
+        with:
+          component: kvtree
+
+      - name: install rankstr
+        uses: ecp-veloc/github-actions/build-ecp-veloc-component@main
+        with:
+          component: rankstr
+
+      - name: install redset
+        uses: ecp-veloc/github-actions/build-ecp-veloc-component@main
+        with:
+          component: redset
+
+      - name: install shuffile
+        uses: ecp-veloc/github-actions/build-ecp-veloc-component@main
+        with:
+          component: shuffile
+
+      - name: build and test
+        uses: ecp-veloc/github-actions/cmake-build-test@main
+        with:
+          component: er
+          target: ${{ matrix.target }}
+          cmake_line: "-DBUILD_SHARED_LIBS=ON -DER_LINK_STATIC=ON"
