@@ -1,6 +1,6 @@
 # Encode/Rebuild (ER)
 
-[![Build Status](https://api.travis-ci.org/ECP-VeloC/er.png?branch=main)](https://travis-ci.org/ECP-VeloC/er)
+[![er build only](https://github.com/ECP-VeloC/er/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/ECP-VeloC/er/actions/workflows/build-and-test.yml)
 
 # Overview
 This module combines the funcitonality of shuffile and redset,
