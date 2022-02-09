@@ -1,4 +1,4 @@
-name: er build and test
+name: er build only
 
 permissions:
   actions: write
@@ -54,7 +54,7 @@ jobs:
           component: shuffile
 
       - name: build and test
-        uses: ecp-veloc/github-actions/cmake-build-test@main
+        uses: ecp-veloc/github-actions/cmake-build@main
         with:
           component: er
           target: ${{ matrix.target }}
