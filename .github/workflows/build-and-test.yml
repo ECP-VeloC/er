@@ -53,9 +53,14 @@ jobs:
         with:
           component: shuffile
 
-      - name: build and test
-        uses: ecp-veloc/github-actions/cmake-build@main
+      - name: build static
+        uses: ecp-veloc/github-actions/cmake-build-static@main
         with:
           component: er
           target: ${{ matrix.target }}
-          cmake_line: "-DBUILD_SHARED_LIBS=ON -DER_LINK_STATIC=ON"
+
+      - name: build only
+        uses: ecp-veloc/github-actions/cmake-build-only@main
+        with:
+          component: er
+          target: ${{ matrix.target }}
