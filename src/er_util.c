@@ -15,9 +15,6 @@
 
 #include <fcntl.h>
 
-/* compute crc32 */
-#include <zlib.h>
-
 #include "mpi.h"
 #include "kvtree.h"
 
