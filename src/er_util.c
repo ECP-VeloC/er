@@ -26,7 +26,7 @@ int er_debug = 1;
 int er_rank = -1;
 char* er_hostname = NULL;
 
-int er_mpi_buf_size = 131072;
+int er_mpi_buf_size = 1024 * 1024;
 size_t er_page_size;
 
 int er_set_size = 8;
