@@ -1,0 +1,11 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(redset REQUIRED)
+find_dependency(shuffile REQUIRED)
+find_dependency(kvtree REQUIRED)
+find_dependency(rankstr REQUIRED)
+find_dependency(MPI REQUIRED)
+
+include("${CMAKE_CURRENT_LIST_DIR}/erTargets.cmake")
