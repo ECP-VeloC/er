@@ -4,16 +4,16 @@
 INCLUDE_DIRECTORIES(${PROJECT_BINARY_DIR})
 
 IF(ER_LINK_STATIC)
-   SET(er_lib er-static)
+   SET(er_lib er::er-static)
 ELSE()
-   SET(er_lib er)
+   SET(er_lib er::er)
 ENDIF()
 
 ADD_EXECUTABLE(test_config test_config.c)
 TARGET_LINK_LIBRARIES(test_config ${er_lib})
 
 ADD_EXECUTABLE(er_test test_er.c)
-TARGET_LINK_LIBRARIES(er_test ${ER_EXTERNAL_LIBS} ${er_lib})
+TARGET_LINK_LIBRARIES(er_test ${er_lib})
 
 ################
 # Add tests to ctest
