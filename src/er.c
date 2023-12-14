@@ -662,7 +662,7 @@ static int er_encode(MPI_Comm comm_world, MPI_Comm comm_store, int num_files, co
   }
 
   /* get list of files recording redudancy data */
-  redset_filelist red_list = redset_filelist_get(redset_path, d);
+  redset_filelist red_list = redset_filelist_enc_get(redset_path, d);
 
   /* allocate space for a new file list to include both app files and redundancy files */
   int red_count = redset_filelist_count(red_list);
@@ -738,6 +738,44 @@ static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* path
     /* rebuild failed, rc is same value across comm_world */
     rc = ER_FAILURE;
   }
+
+  /* rebuild shuffile file in case we are on a new node */
+
+  /* if the rebuild succeeds, rebuild the shuffile file */
+  if (rc == ER_SUCCESS) {
+    /* get list of app files and files added by redudancy scheme */
+    redset_filelist app_list = redset_filelist_orig_get(redset_path, d);
+    redset_filelist red_list  = redset_filelist_enc_get(redset_path, d);
+
+    /* allocate space for a new file list to include both app files and redundancy files */
+    int app_count = redset_filelist_count(app_list);
+    int red_count = redset_filelist_count(red_list);
+    int count = app_count + red_count;
+    const char** filenames = (const char**) ER_MALLOC(count * sizeof(char*));
+
+    /* fill in list of file names */
+    int i;
+    for (i = 0; i < app_count; i++) {
+      /* application files */
+      filenames[i] = redset_filelist_file(app_list, i);
+    }
+    for (i = 0; i < red_count; i++) {
+      /* redundancy files */
+      filenames[app_count + i] = redset_filelist_file(red_list, i);
+    }
+
+    /* associate list of both app files and redundancy files with calling process */
+    if (shuffile_create(comm_world, comm_store, count, filenames, shuffile_file) != SHUFFILE_SUCCESS) {
+      /* failed to register files with shuffile */
+      rc = ER_FAILURE;
+    }
+
+    /* free the new file list */
+    er_free(&filenames);
+    redset_filelist_release(&red_list);
+    redset_filelist_release(&app_list);
+  }
+
   redset_delete(&d);
 
   /* if successful, update state to ENCODED, otherwise leave as CORRUPT */
