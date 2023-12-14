@@ -662,7 +662,7 @@ static int er_encode(MPI_Comm comm_world, MPI_Comm comm_store, int num_files, co
   }
 
   /* get list of files recording redudancy data */
-  redset_filelist red_list = redset_filelist_get(redset_path, d);
+  redset_filelist red_list = redset_filelist_enc_get(redset_path, d);
 
   /* allocate space for a new file list to include both app files and redundancy files */
   int red_count = redset_filelist_count(red_list);
@@ -744,36 +744,36 @@ static int er_rebuild(MPI_Comm comm_world, MPI_Comm comm_store, const char* path
   /* if the rebuild succeeds, rebuild the shuffile file */
   if (rc == ER_SUCCESS) {
     /* get list of app files and files added by redudancy scheme */
-    redset_filelist orig_list = redset_filelist_orig_get(redset_path, d);
-    redset_filelist red_list  = redset_filelist_get(redset_path, d);
+    redset_filelist app_list = redset_filelist_orig_get(redset_path, d);
+    redset_filelist red_list  = redset_filelist_enc_get(redset_path, d);
 
     /* allocate space for a new file list to include both app files and redundancy files */
-    int orig_count = redset_filelist_count(orig_list);
-    int red_count  = redset_filelist_count(red_list);
-    int count = orig_count + red_count;
-    const char** filenames2 = (const char**) ER_MALLOC(count * sizeof(char*));
+    int app_count = redset_filelist_count(app_list);
+    int red_count = redset_filelist_count(red_list);
+    int count = app_count + red_count;
+    const char** filenames = (const char**) ER_MALLOC(count * sizeof(char*));
 
     /* fill in list of file names */
     int i;
-    for (i = 0; i < orig_count; i++) {
+    for (i = 0; i < app_count; i++) {
       /* application files */
-      filenames2[i] = redset_filelist_file(orig_list, i);
+      filenames[i] = redset_filelist_file(app_list, i);
     }
     for (i = 0; i < red_count; i++) {
       /* redundancy files */
-      filenames2[orig_count + i] = redset_filelist_file(red_list, i);
+      filenames[app_count + i] = redset_filelist_file(red_list, i);
     }
 
     /* associate list of both app files and redundancy files with calling process */
-    if (shuffile_create(comm_world, comm_store, count, filenames2, shuffile_file) != SHUFFILE_SUCCESS) {
+    if (shuffile_create(comm_world, comm_store, count, filenames, shuffile_file) != SHUFFILE_SUCCESS) {
       /* failed to register files with shuffile */
       rc = ER_FAILURE;
     }
 
     /* free the new file list */
-    er_free(&filenames2);
+    er_free(&filenames);
     redset_filelist_release(&red_list);
-    redset_filelist_release(&orig_list);
+    redset_filelist_release(&app_list);
   }
 
   redset_delete(&d);
