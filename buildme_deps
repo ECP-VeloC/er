@@ -33,7 +33,7 @@ rm -rf KVTree/build
 mkdir KVTree/build
 
 cd KVTree/build
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-O0" -DCMAKE_INSTALL_PREFIX=$installdir -DMPI=ON ..
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-O0" -DCMAKE_INSTALL_PREFIX=$installdir -DBUILD_SHARED_LIBS=ON -DMPI=ON ..
 make clean
 make
 make install
@@ -45,7 +45,7 @@ mkdir rankstr/build
 
 # rankstr
 cd rankstr/build
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-O0" -DCMAKE_INSTALL_PREFIX=$installdir -DMPI=ON ..
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-O0" -DCMAKE_INSTALL_PREFIX=$installdir -DBUILD_SHARED_LIBS=ON ..
 make clean
 make
 make install
@@ -57,7 +57,7 @@ mkdir redset/build
 
 # redset
 cd redset/build
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-O0" -DCMAKE_INSTALL_PREFIX=$installdir -DWITH_KVTREE_PREFIX=$installdir -DMPI=ON ..
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-O0" -DCMAKE_INSTALL_PREFIX=$installdir -DBUILD_SHARED_LIBS=ON ..
 make clean
 make
 make install
@@ -69,7 +69,7 @@ mkdir shuffile/build
 
 # shuffile
 cd shuffile/build
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-O0" -DCMAKE_INSTALL_PREFIX=$installdir -DWITH_KVTREE_PREFIX=$installdir -DMPI=ON ..
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-O0" -DCMAKE_INSTALL_PREFIX=$installdir -DBUILD_SHARED_LIBS=ON ..
 make clean
 make
 make install
