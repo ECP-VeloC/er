@@ -1,3 +1,6 @@
+include:
+  - project: 'lc-templates/id_tokens'
+    file: 'id_tokens.yml'
 slurm-job:
   tags:
     - quartz
